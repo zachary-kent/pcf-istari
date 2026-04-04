@@ -46,6 +46,74 @@ reflexivity.
 qed ();
 
 
+typedef
+/
+  datatype
+    U 0
+  of
+    ty : type =
+    | Nat : ty
+    | Arrow : ty -> ty -> ty
+/;
+
+
+
+typedef
+/
+  datatype
+    U 0
+  of
+    ctx : type =
+    | Empty : ctx
+    | Extend : ctx -> ty -> ctx
+/;
+
+
+defineInd /Gamma/
+/
+  catenate : ctx -> ctx of
+  | Empty . Gamma
+  | Extend Delta tau . Extend (catenate Delta) tau
+//
+  ctx -> ctx -> ctx
+/;
+
+typedef
+/
+  datatype
+    U 0
+  of
+    bound : ctx -> ty -> type =
+    | Z : forall (Gamma : ctx) (tau : ty) . bound (Extend Gamma tau) tau
+    | S : forall (Gamma : ctx) (sigma tau : ty) . bound Gamma tau -> bound (Extend Gamma sigma) tau
+/;
+
+typedef
+/
+  datatype
+    U 0
+  of
+    exp : ctx -> ty -> type =
+    | Var : forall (Gamma : ctx) (tau : ty) . bound Gamma tau -> exp Gamma tau
+    | Zero : forall (Gamma : ctx) . exp Gamma Nat
+    | Lam : forall (Gamma : ctx) (sigma tau : ty) . exp (Extend Gamma sigma) tau -> exp Gamma (Arrow sigma tau)
+    | App : forall (Gamma : ctx) (sigma tau : ty) . exp Gamma (Arrow sigma tau) -> exp Gamma sigma -> exp Gamma tau
+    | Fix : forall (Gamma : ctx) (sigma : ty) . exp Gamma (Arrow sigma sigma) -> exp Gamma sigma
+    | Succ : forall (Gamma : ctx) . exp Gamma Nat -> exp Gamma Nat
+    | Pred : forall (Gamma : ctx) . exp Gamma Nat -> exp Gamma Nat
+    | Ifz : forall (Gamma : ctx) (sigma : ty) . exp Gamma Nat -> exp Gamma sigma -> exp Gamma sigma
+/;
+
+typedef
+/
+  datatype
+    U 0
+  of
+    ctx : type =
+    | Empty : ctx
+    | Extend : ctx -> ty -> ctx
+/;
+
 
 define /cons {a} h t/
 /
