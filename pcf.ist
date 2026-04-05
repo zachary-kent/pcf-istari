@@ -264,6 +264,32 @@ repeat split >> reduce //.
 { apply /traverse_compose/. }
 qed ();
 
+(* setOpacity /pcfSubstT/ Constant.SOFT; *)
+
+reductions
+/
+  Subst.term (pcfSubstT) --> term ;
+  Subst.var (pcfSubstT) --> Var ;
+  unfolding Subst.term Subst.var pcfSubstT
+/;
+
+typedef
+/ datatype U 0 of
+  step : term -> bool -> term -> type =
+  | step_app : forall (M M' N : term) (k : bool) . step M k M' -> step (App M N) k (App M' N)
+  | step_app_beta : forall (M N : term) . step (App (Lam M) N) false (Subst.subst pcfSubstT (Subst.dot N (Subst.sh 0)) M)
+  | step_fix_beta : forall (M : term) . step (Fix M) true (Subst.subst pcfSubstT (Subst.dot M (Subst.sh 0)) M)
+  | step_succ_beta : forall (n : nat) . step (Succ (Num n)) false (Num (succ n))
+  | step_succ : forall (M N : term) (k : bool) . step M k N -> step (Succ M) k (Succ N)
+  | step_pred_beta : forall (n : nat) . step (Pred (Num n)) false (Num (Nat.pred n))
+  | step_pred : forall (M N : term) (k : bool) . step M k N -> step (Pred M) k (Pred N)
+  | step_ifz_beta_zero : forall (M N : term) . step (Ifz (Num zero) M N) false M
+  | step_ifz_beta_succ : forall (M N : term) (n : nat) . step (Ifz (Num (succ n)) M N) false N
+  | step_ifz_guard : forall (M M' N P : term) (k : bool) . step M k M' -> step (Ifz M N P) k (Ifz M' N P)
+/;
+
+
+unfold /pcfSubstT/.
 
 define /SubstType i/
 /
