@@ -3,6 +3,8 @@
 
 openModule /Bool/;
 openModule /Eventually/;
+openModule /List/;
+openModule /Option/;
 (* openModule /Divide/; *)
 
 
@@ -56,6 +58,52 @@ typedef
     | Arrow : ty -> ty -> ty
 /;
 
+typedef
+/
+  datatype
+    U 0
+  of
+    exp : type =
+    | Var : nat -> exp
+    (* | Zero : forall (Gamma : ctx) . exp Gamma Nat *)
+    | Num : nat -> exp
+    | Lam : exp -> exp
+    | App : exp -> exp -> exp
+    | Fix : exp -> exp
+    | Succ : exp -> exp
+    | Pred : exp -> exp
+    | Ifz : exp -> exp -> exp -> exp
+/;
+
+typedef
+/
+  datatype
+    U 0
+  of
+    has_type : list ty -> exp -> ty -> type =
+    | VarTyped : forall (Gamma : list ty) (i : nat) (sigma : ty) . (nth Gamma i = Some sigma : option ty) -> has_type Gamma (Var i) sigma
+    | NumTyped : forall (Gamma : list ty) (n : nat) . has_type Gamma (Num n) Nat
+    | LamTyped : forall (Gamma : list ty) (sigma tau : ty) (M : exp) . 
+        has_type (sigma :: Gamma) M tau -> has_type Gamma (Lam M) (Arrow sigma tau)
+    | AppTyped : forall (Gamma : list ty) (sigma tau : ty) (M N : exp) .
+        has_type Gamma M (Arrow sigma tau) ->
+        has_type Gamma N sigma ->
+          has_type Gamma (App M N) tau
+    | FixTyped : forall (Gamma : list ty) (sigma : ty) (M : exp) .
+        has_type Gamma M (Arrow sigma sigma) ->
+          has_type Gamma (Fix M) sigma
+    | SuccTyped : forall (Gamma : list ty) (M : exp) .
+        has_type Gamma M Nat ->
+          has_type Gamma (Succ M) Nat
+    | PredTyped : forall (Gamma : list ty) (M : exp) .
+        has_type Gamma M Nat ->
+          has_type Gamma (Pred M) Nat
+    | IfzTyped : forall (Gamma : list ty) (M N P : exp) (sigma : ty) .
+        has_type Gamma M Nat ->
+        has_type Gamma N sigma ->
+        has_type Gamma P sigma ->
+          has_type Gamma (Ifz M N P) sigma
+/;
 
 
 typedef
@@ -81,11 +129,12 @@ defineInd /Gamma/
 typedef
 /
   datatype
+    forall (tau : ty) .
     U 0
   of
-    bound : ctx -> ty -> type =
-    | Z : forall (Gamma : ctx) (tau : ty) . bound (Extend Gamma tau) tau
-    | S : forall (Gamma : ctx) (sigma tau : ty) . bound Gamma tau -> bound (Extend Gamma sigma) tau
+    bound : ctx -> type =
+    | Z : forall (Gamma : ctx) . bound (Extend Gamma tau)
+    | S : forall (sigma : ty) (Gamma : ctx) . bound Gamma -> bound (Extend Gamma sigma)
 /;
 
 typedef
@@ -94,8 +143,9 @@ typedef
     U 0
   of
     exp : ctx -> ty -> type =
-    | Var : forall (Gamma : ctx) (tau : ty) . bound Gamma tau -> exp Gamma tau
-    | Zero : forall (Gamma : ctx) . exp Gamma Nat
+    | Var : forall (Gamma : ctx) (tau : ty) . bound tau Gamma -> exp Gamma tau
+    (* | Zero : forall (Gamma : ctx) . exp Gamma Nat *)
+    | Num : forall (Gamma : ctx) . nat -> exp Gamma Nat
     | Lam : forall (Gamma : ctx) (sigma tau : ty) . exp (Extend Gamma sigma) tau -> exp Gamma (Arrow sigma tau)
     | App : forall (Gamma : ctx) (sigma tau : ty) . exp Gamma (Arrow sigma tau) -> exp Gamma sigma -> exp Gamma tau
     | Fix : forall (Gamma : ctx) (sigma : ty) . exp Gamma (Arrow sigma sigma) -> exp Gamma sigma
@@ -103,6 +153,163 @@ typedef
     | Pred : forall (Gamma : ctx) . exp Gamma Nat -> exp Gamma Nat
     | Ifz : forall (Gamma : ctx) (sigma : ty) . exp Gamma Nat -> exp Gamma sigma -> exp Gamma sigma
 /;
+
+define /Subst Gamma Delta/ 
+/
+  forall (sigma : ty) . bound sigma Gamma -> exp Delta sigma
+//
+  ctx -> ctx -> U 0
+/;
+
+unfold /Subst/.
+typecheck.
+qed ();
+
+define /Rename Gamma Delta/ 
+/
+  forall (sigma : ty) . bound sigma Gamma -> bound sigma Delta
+//
+  ctx -> ctx -> U 0
+/;
+
+unfold /Rename/.
+typecheck.
+qed ();
+
+define /extend_var {Gamma Delta sigma} rho tau Hbound/
+(* define /extend_var (rho : Rename Gamma Delta) (tau : ty) (Hbound : bound tau (Extend Gamma sigma)) : bound tau (Extend Delta sigma) / *)
+/
+  case Hbound : bound of
+  | Z Gamma' . Z tau Delta
+  | S sigma' Gamma' x . S tau sigma Delta (rho tau x)
+//
+  forall (Gamma Delta : ctx) (sigma : ty) . Rename Gamma Delta -> Rename (Extend Gamma sigma) (Extend Delta sigma)
+/;
+
+unfold /extend_var/.
+unfold /Rename at all/.
+reduce //.
+inference.
+reduce //.
+typecheck1.
+{ auto. }
+{ 
+  typecheck1.
+
+}
+
+  inversion /v1/.
+  { 
+    auto.
+  }
+  {
+
+
+  }
+
+
+}
+
+inference.
+
+
+qed ();
+
+
+introOf /Hbound/.
+
+
+
+
+inference.
+reduce //.
+
+
+
+
+
+
+
+Subst : Ctx → Ctx → Set
+  Subst Γ Δ = ∀ {A} → Γ ∋ A → Exp Δ A
+  
+  Rename : Ctx → Ctx → Set
+  Rename Γ Δ = ∀ {A} → Γ ∋ A → Δ ∋ A
+  
+  extend-var : Rename Γ Δ → Rename (Γ # A) (Δ # A)
+  extend-var ρ Z      =  Z
+  extend-var ρ (S x)  =  S (ρ x)
+
+  lift : Rename Γ (Γ # A)
+  lift Z = S Z
+  lift (S x) = S (lift x)
+  
+  rename : Rename Γ Δ → Exp Γ B → Exp Δ B
+  rename ρ (` x)         = ` (ρ x)
+  rename ρ yes           = yes
+  rename ρ no            = no
+  rename ρ triv          = triv
+  rename ρ (pair M₁ M₂)  = pair (rename ρ M₁) (rename ρ M₂)
+  rename ρ (fst M)       = fst (rename ρ M)
+  rename ρ (snd M)       = snd (rename ρ M)
+  rename ρ (lam M)       = lam (rename (extend-var ρ) M)
+  rename ρ (app M M₁)    = app (rename ρ M) (rename ρ M₁)
+  rename ρ zero          = zero
+  rename ρ (suc M)       = suc (rename ρ M)
+  rename ρ (rec M₀ M₁ M) = rec (rename ρ M₀) (rename (extend-var ρ) M₁) (rename ρ M)
+  
+  weaken : Subst Γ Δ → Subst (Γ # A) (Δ # A)
+  weaken γ Z     = ` Z
+  weaken γ (S x) = rename S (γ x)
+  
+  subst : Subst Γ Δ → Exp Γ A → Exp Δ A
+  subst γ (` x)         = γ x
+  subst γ yes           = yes
+  subst γ no            = no
+  subst γ triv          = triv
+  subst γ (pair M₁ M₂)  = pair (subst γ M₁) (subst γ M₂)
+  subst γ (fst M)       = fst (subst γ M)
+  subst γ (snd M)       = snd (subst γ M)
+  subst γ (lam M)       = lam (subst (weaken γ) M)
+  subst γ (app M M₁)    = app (subst γ M) (subst γ M₁)
+  subst γ zero          = zero
+  subst γ (suc M)       = suc (subst γ M)
+  subst γ (rec M₀ M₁ M) = rec (subst γ M₀) (subst (weaken γ) M₁) (subst γ M)
+  
+  extend : Exp Δ A → Subst Γ Δ → Subst (Γ # A) Δ
+  extend M γ Z     = M
+  extend M γ (S x) = γ x
+  
+  _[_] : Exp (Γ # B) A → Exp Γ B → Exp Γ A
+  N [ M ] = subst (extend M `_) N
+  
+  data _↦_ : Exp · A → Exp · A → Set where
+    step-fst   : {M M' : Exp · (prod A₁ A₂)} → (M ↦ M') → (fst M ↦ fst M')
+    step-fst-β : {M₁ : Exp · A₁} {M₂ : Exp · A₂} → (fst (pair M₁ M₂) ↦ M₁)
+    step-snd   : {M M' : Exp · (prod A₁ A₂)} → (M ↦ M') → (snd M ↦ snd M')
+    step-snd-β : {M₁ : Exp · A₁} {M₂ : Exp · A₂} → (snd (pair M₁ M₂) ↦ M₂)
+    step-app   : {M₁ M₁' : Exp · (arr A₁ A₂)} {M₂ : Exp · A₁} → (M₁ ↦ M₁') → (app M₁ M₂) ↦ (app M₁' M₂)
+    step-app-β : {M₂ : Exp (· # A₁) A₂} {M₁ : Exp · A₁} → (app (lam M₂) M₁) ↦ (M₂ [ M₁ ])
+    step-rec   : ∀ {M₀ : Exp · A} {M₁ M M'} → (M ↦ M') → (rec M₀ M₁ M ↦ rec M₀ M₁ M')
+    step-rec-β₀ : ∀ {M₀ : Exp · A} {M₁} → (rec M₀ M₁ zero ↦ M₀)
+    step-rec-β₁ : ∀ {M₀ : Exp · A} {M₁ M} → (rec M₀ M₁ (suc M) ↦ (M₁ [ rec M₀ M₁ M ]))
+  
+  data _↦*_ : Exp · A → Exp · A → Set where
+    ↦*-refl : {M : Exp · A} → M ↦* M
+    ↦*-step : {M M' M'' : Exp · A} → M ↦ M' → M' ↦* M'' → M ↦* M''
+  
+  ↦*-trans : {M M' M'' : Exp · A} → M ↦* M' → M' ↦* M'' → M ↦* M''
+  ↦*-trans ↦*-refl step = step
+  ↦*-trans (↦*-step step₁ step₂) step = ↦*-step step₁ (↦*-trans step₂ step)
+  
+  compatible : {p : Exp · A → Exp · B}
+    → ({M M' : Exp · A} → M ↦ M' → p M ↦ p M')
+    → {M M' : Exp · A} → M ↦* M' → p M ↦* p M'
+  compatible lift ↦*-refl       = ↦*-refl
+  compatible lift (↦*-step x s) = ↦*-step (lift x) (compatible lift s)
+ 
+
+
 
 typedef
 /
