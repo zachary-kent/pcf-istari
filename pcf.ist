@@ -182,6 +182,69 @@ induction /t/ >> auto.
 }
 qed ();
 
+    (* (
+      intersect (S : U i) . forall (R : S -> U i) (enter : S -> S) (resolve : S -> nat -> term) (s : S) (t : term) .
+      (forall (s : S) . R s -> R (enter s))
+      -> (forall (s : S) (n : nat) . R s -> resolve s n = var_traverse #1 n : term)
+      -> R s
+      -> var_traverse #2 enter resolve s t = t : term
+    )
+    &
+    (
+      intersect (S S' : U i) . forall (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term) (resolve' : S' -> nat -> term) (s : S) (s' : S') (t : term) .
+      var_traverse #2 enter resolve s (var_traverse #2 enter' resolve' s' t)
+        = var_traverse #2
+          (fn (p : S & S') . (enter (p #1), enter' (p #2)))
+          (fn (p : S & S') (n : nat) . var_traverse #2 enter resolve (p #1) (resolve' (p #2) n))
+          (s, s') t : term *)
+
+lemma "traverse_id"
+/
+  intersect (i : level) .
+    forall (S : U i) (R : S -> U i) (enter : S -> S) (resolve : S -> nat -> term) (s : S) (t : term) .
+      (forall (s : S) . R s -> R (enter s)) ->
+        (forall (s : S) (n : nat) . R s -> resolve s n = Var n : term) ->
+          R s ->
+          `traverse S enter resolve t s = t : term
+/;
+
+intro /i S R enter resolve s t Hrelenter Hres/.
+revert /s/.
+induction /t/ >> auto.
+{
+  intro /M IH s Hrel/.
+  auto.
+}
+{
+  intro /M IHM N IHN s Hrel/.
+  auto.
+}
+{
+  intro /M IH s Hrel/.
+  auto.
+}
+{
+  intro /M IH s Hrel/.
+  auto.
+}
+{
+  intro /M IH s HRel/.
+  auto.
+}
+{
+  intro /M IHM N IHN P IHP s Hrel/.
+  auto.
+}
+qed ();
+
+
+
+      intersect (S : U i) . forall (R : S -> U i) (enter : S -> S) (resolve : S -> nat -> term) (s : S) (t : term) .
+      (forall (s : S) . R s -> R (enter s))
+      -> (forall (s : S) (n : nat) . R s -> resolve s n = var_traverse #1 n : term)
+      -> R s
+      -> var_traverse #2 enter resolve s t = t : term
+
 
 intersect (S : U i) . forall (enter : S -> S) (resolve : S -> nat -> term substT) (s : S) (n : nat) .
   traverse substT enter resolve s (var substT n) = resolve s n : term substT
