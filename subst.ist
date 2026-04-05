@@ -1,0 +1,1676 @@
+openModule /Nat/;
+openModule /List/;
+openModule /Option/;
+
+Namespace.beginModule "Subst";
+
+
+define /SubstType i/
+/
+  exists (term : U i) .
+  { var_traverse : (nat -> term) & (forall (S : U i) . (S -> S) -> (S -> nat -> term) -> S -> term -> term)
+  |
+    (
+      forall (S : U i) (enter : S -> S) (resolve : S -> nat -> term) (s : S) (n : nat) .
+        var_traverse #2 S enter resolve s (var_traverse #1 n) = resolve s n : term
+    )
+    &
+    (
+      forall (S S' : U i) (R : S -> S' -> U i) (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term) (resolve' : S' -> nat -> term) (s : S) (s' : S') (t : term) .
+      (forall (s : S) (s' : S') . R s s' -> R (enter s) (enter' s'))
+      -> (forall (s : S) (s' : S') (n : nat) . R s s' -> resolve s n = resolve' s' n : term)
+      -> R s s'
+      -> var_traverse #2 S enter resolve s t = var_traverse #2 S' enter' resolve' s' t : term
+    )
+    &
+    (
+      forall (S : U i) (R : S -> U i) (enter : S -> S) (resolve : S -> nat -> term) (s : S) (t : term) .
+      (forall (s : S) . R s -> R (enter s))
+      -> (forall (s : S) (n : nat) . R s -> resolve s n = var_traverse #1 n : term)
+      -> R s
+      -> var_traverse #2 S enter resolve s t = t : term
+    )
+    &
+    (
+      forall (S S' : U i) . forall (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term) (resolve' : S' -> nat -> term) (s : S) (s' : S') (t : term) .
+      var_traverse #2 S enter resolve s (var_traverse #2 S' enter' resolve' s' t)
+        = var_traverse #2 (S & S')
+          (fn (p : S & S') . (enter (p #1), enter' (p #2)))
+          (fn (p : S & S') (n : nat) . var_traverse #2 S enter resolve (p #1) (resolve' (p #2) n))
+          (s, s') t : term
+    )
+  }
+//
+  forall (i : level) . U (1 + i)
+/;
+introOf /i/.
+unfold /SubstType/.
+typecheck.
+
+qed ();
+
+define /term substT/
+/
+  substT #1
+//
+  intersect (i : level) . SubstType i -> U i
+/;
+unfold /term/.
+typecheck.
+qed();
+
+define /var substT/
+/
+  substT #2 #1
+//
+  intersect (i : level) . forall (substT : SubstType i) . nat -> (term substT) 
+/;
+unfold /var, term/.
+typecheck.
+qed();
+
+define /traverse substT/
+/
+  substT #2 #2
+//
+  intersect (i : level) . forall (substT : SubstType i) . (forall (S : U i) . (S -> S) -> (S -> nat -> term substT) -> S -> term substT -> term substT) 
+/;
+unfold /traverse, term at all/.
+typecheck.
+qed();
+
+
+lemma "traverse_var"
+/
+  intersect (i : level) . forall (substT : SubstType i) (S : U i) (enter : S -> S) (resolve : S -> nat -> term substT) (s : S) (n : nat) .
+      traverse substT S enter resolve s (var substT n) = resolve s n : term substT
+/;
+intro /i [termT [[traverseT varT] Hsub]]/.
+unfold /term at all, traverse, var/.
+intro /S enter resolve s n/.
+reduce /Hsub/.
+unhide.
+apply /Hsub/.
+qed();
+
+lemma "traverse_parametric"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  intersect (S S' : U i) . forall (R : S -> S' -> U i) (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term substT) (resolve' : S' -> nat -> term substT) (s : S) (s' : S') (t : term substT) .
+  (forall (s : S) (s' : S') . R s s' -> R (enter s) (enter' s'))
+  -> (forall (s : S) (s' : S') (n : nat) . R s s' -> resolve s n = resolve' s' n : term substT)
+  -> R s s'
+  -> traverse substT S enter resolve s t = traverse substT S' enter' resolve' s' t : term substT
+/;
+intro /i [termT [[traverseT varT] Hsub]]/.
+unfold /term at all, traverse at all/.
+reduce /Hsub/.
+intro /S S' R enter enter' resolve resolve' s s' t H1 H2 H3/.
+unhide.
+apply /Hsub/ >> auto.
+qed();
+
+lemma "traverse_id"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  intersect (S : U i) . forall (R : S -> U i) (enter : S -> S) (resolve : S -> nat -> term substT) (s : S) (t : term substT) .
+    (forall (s : S) . R s -> R (enter s))
+    -> (forall (s : S) (n : nat) . R s -> resolve s n = var substT n : term substT)
+    -> R s
+    -> traverse substT S enter resolve s t = t : term substT
+/;
+intro /i [termT [[traverseT varT] Hsub]]/.
+unfold /term at all, traverse, var/.
+intro /S R enter resolve s t H1 H2 H3/.
+reduce /Hsub/.
+unhide.
+apply /Hsub/ >> auto.
+qed();
+
+lemma "traverse_compose"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  intersect (S S' : U i) . forall (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term substT) (resolve' : S' -> nat -> term substT) (s : S) (s' : S') (t : term substT) .
+  traverse substT S enter resolve s (traverse substT S' enter' resolve' s' t)
+    = traverse substT (S & S')
+      (fn (p : S & S') . (enter (p #1), enter' (p #2)))
+      (fn (p : S & S') (n : nat) . traverse substT S enter resolve (p #1) (resolve' (p #2) n))
+      (s, s') t : term substT
+/;
+intro /i [termT [[traverseT varT] Hsub]]/.
+unfold /term at all, traverse at all/.
+reduce /Hsub/.
+intro /S S' enter enter' resolve resolve' s s' t/.
+unhide.
+apply /Hsub/ >> auto.
+qed();
+
+typedef
+/
+  datatype
+    intersect (i : level) .
+    intermediate (substT : SubstType i) .
+    U i
+  of
+    sub : type =
+    | dot : term substT -> sub -> sub
+    | sh : nat -> sub
+/;
+
+definerec /trunc substT n s/
+/
+  nat_case n s (fn n' . 
+    case s : sub of
+    | dot _ s' . trunc substT n' s'
+    | sh m . sh (m + n)
+  )
+//
+  intersect (i : level) . forall (substT : SubstType i) . nat -> sub substT -> sub substT
+/;
+introOf /i substT n s/.
+revert /s/.
+sinduction /n/.
+reintro /Hind/.
+intro /s/.
+destruct /n/ /| n'/ >> unroll /trunc/ >> inference >> auto.
+destruct /s/ /{v s' | m }/ >> reduce // >> auto.
+apply /Hind/.
+omega.
+qed();
+
+reductions
+/
+  trunc substT (zero) s --> s ;
+  trunc substT (succ n') (dot _ s') --> trunc substT n' s' ;
+  trunc substT (succ n') (sh m) --> sh (m + (succ n')) ;
+  unrolling trunc
+/;
+
+define /project substT s n/
+/
+  case (trunc substT n s) : sub of
+  | dot t _ . t
+  | sh i . var substT i
+//
+  intersect (i : level) . forall (substT : SubstType i) . sub substT -> nat -> term substT
+/;
+unfold /project/.
+inference.
+typecheck.
+qed();
+
+reductions
+/
+  project substT (dot t _) (zero) --> t ;
+  project substT (sh i) (zero) --> var substT i ;
+  project substT (dot _ s) (succ n) --> project substT s n ;
+  project substT (sh m) (succ n) --> var substT (m + succ n) ;
+  unfolding project
+/;
+
+define /shift_var substT n i/
+/
+  if ltb i n then (var substT) i else (var substT) (succ i)
+//
+  intersect (i : level) . forall (substT : SubstType i) . nat -> nat -> term substT
+/;
+unfold /shift_var/.
+typecheck.
+qed();
+
+definerec /shift_sub substT s/
+/
+  case s : sub of
+  | dot t s' . dot ((traverse substT nat) succ (shift_var substT) 0 t) (shift_sub substT s')
+  | sh m . sh (succ m)
+//
+  intersect (i : level) . forall (substT : SubstType i) . sub substT -> sub substT
+/;
+introOf /i substT s/.
+sinduction /s/.
+reintro /Hind/.
+unroll /shift_sub/.
+inference.
+destruct /s/ /{t s' | m}/ >> reduce // >> typecheck.
+apply /Hind/.
+apply /dot_subterm/.
+qed();
+
+reductions
+/
+  shift_sub substT (dot t s') --> dot ((traverse substT nat) succ (shift_var substT) 0 t) (shift_sub substT s') ;
+  shift_sub substT (sh m) --> sh (succ m) ;
+  unrolling shift_sub
+/;
+
+define /subst substT/
+/
+  (traverse substT (sub substT))
+  (fn (s' : sub substT) .
+    dot (var substT 0) (shift_sub substT s')
+  )
+  (project substT)
+//
+  intersect (i : level) . forall (substT : SubstType i) . sub substT -> term substT -> term substT
+/;
+unfold /subst/.
+typecheck.
+qed();
+
+definerec /compose substT s1 s2/
+/
+  case s1 : sub of
+  | dot t s1' . dot (subst substT s2 t) (compose substT s1' s2)
+  | sh n . trunc substT n s2
+//
+  intersect (i : level) . forall (substT : SubstType i) . sub substT -> sub substT -> sub substT
+/;
+introOf /i substT s1 s2/.
+sinduction /s1/.
+reintro /Hind/.
+unroll /compose/.
+inference.
+destruct /s1/ /{t s1' | n}/ >> reduce // >> typecheck.
+apply /Hind/.
+apply /dot_subterm/.
+qed();
+
+reductions
+/
+  compose substT (dot t s1') s2 --> dot (subst substT s2 t) (compose substT s1' s2) ;
+  compose substT (sh n) s2 --> trunc substT n s2 ;
+  unrolling compose
+/;
+
+definerec /under substT n s/
+/
+  nat_case n s (fn n' . 
+    dot (var substT 0) (shift_sub substT (under substT n' s))
+  )
+//
+  intersect (i : level) . forall (substT : SubstType i) . nat -> sub substT -> sub substT
+/;
+introOf /i substT n s/.
+sinduction /n/.
+reintro /Hind/.
+unroll /under/.
+inference.
+destruct /n/ /| n'/ >> reduce // >> typecheck.
+apply /Hind/.
+omega.
+qed();
+
+
+reductions
+/
+  under substT (zero) s --> s ;
+  under substT (succ n) s --> dot (var substT 0) (shift_sub substT (under substT n s)) ;
+  unrolling under
+/;
+
+lemma "subst_eq_traverse"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (s : sub substT) (t : term substT) .
+  subst substT s t = traverse substT (sub substT) (under substT 1) (project substT) s t : term substT
+/;
+intro /i substT s t/.
+unfold /subst/.
+compat.
+introEq /s'/.
+auto.
+qed();
+
+lemma "subst_var"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (s : sub substT) (n : nat) .
+  subst substT s (var substT n) = project substT s n : term substT
+/;
+intro /i substT s n/.
+unfold /subst/.
+apply /traverse_var/.
+qed();
+
+define /trunc1 substT s/
+/
+  case s : sub of
+  | dot _ s' . s'
+  | sh n . sh (succ n)
+//
+  intersect (i : level) . forall (substT : SubstType i) . sub substT -> sub substT
+/;
+unfold /trunc1/.
+inference.
+typecheck.
+qed();
+
+reductions
+/
+  trunc1 substT (dot _ s) --> s ;
+  trunc1 substT (sh n) --> sh (succ n) ;
+  unfolding trunc1
+/;
+
+
+lemma "trunc_sh"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m n : nat) .
+    trunc substT m (sh n) = sh (m + n) : sub substT
+/;
+intro /i substT m n/.
+destruct /m/ /| m/ >> reduce // >> auto.
+compat.
+omega.
+qed();
+
+lemma "trunc_succ_outer"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s : sub substT) .
+  trunc substT (succ n) s = trunc1 substT (trunc substT n s) : sub substT
+/;
+intro /i substT n/.
+induction /n/.
+{
+  intro /s/.
+  destruct /s/ /{t s | m}/ >> reduce // >> auto.
+  compat.
+  omega.
+}
+{
+  intro /n IH {t s | m}/ >> reduce //.
+  {
+    apply /IH/.
+  }
+  {
+    compat.
+    omega.
+  }
+}
+qed();
+
+lemma "trunc_sum"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m n : nat) (s : sub substT) .
+  trunc substT m (trunc substT n s) = trunc substT (m + n) s : sub substT
+/;
+intro /i substT m n s/.
+induction /m/ >> auto.
+intro /m IH/.
+rewrite /-> trunc_succ_outer at all/.
+compat.
+auto.
+qed();
+
+lemma "trunc_succ_inner"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s : sub substT) .
+    trunc substT (succ n) s = trunc substT n (trunc1 substT s) : sub substT
+/;
+intro /i substT n s/.
+destruct /s/ /{t s | m}/ >> auto.
+reduce //.
+destruct /n/ /| n/ >> reduce // >> compat >> omega.
+qed();
+
+lemma "trunc1_under"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s : sub substT) .
+  1 <= n
+  -> trunc1 substT (under substT n s) = shift_sub substT (under substT (n - 1) s) : sub substT
+/;
+intro /i substT n s H/.
+destruct /n/ /| n/ >> reduce // >> auto.
+omega.
+qed();
+
+lemma "project_zero"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n m : nat) .
+  project substT (sh n) m = var substT (n + m) : term substT
+/;
+intro /i substT n m/.
+destruct /m/ /| m/ >> reduce // >> compat >> omega.
+qed();
+
+lemma "project_dot"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t : term substT) (s : sub substT) (j : nat) .
+    project substT (dot t s) (succ j) = project substT s j : term substT
+/;
+intro /i substT t s j/.
+reduce //.
+auto.
+qed();
+
+lemma "project_sh"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n j : nat) .
+    project substT (sh n) j = var substT (n + j) : term substT
+/;
+intro /i substT n j/.
+destruct /j/ /| j/ >> reduce // >> auto.
+compat.
+omega.
+qed();
+
+lemma "shift_var_lt"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n m : nat) .
+  m < n -> shift_var substT n m = var substT m : term substT
+/;
+intro /i substT n m H/.
+unfold /shift_var/.
+boolCase /m <? n/ /Hb/ >> auto.
+omega.
+qed();
+
+lemma "shift_var_ge"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n m : nat) .
+  n <= m -> shift_var substT n m = var substT (succ m) : term substT
+/;
+intro /i substT n m H/.
+unfold /shift_var/.
+boolCase /m <? n/ /Hb/ >> auto.
+omega.
+qed();
+
+
+definerec /nshift_term substT n t/
+/
+  nat_case n t (fn n' . traverse substT nat succ (shift_var substT) 0 (nshift_term substT n' t))
+//
+  intersect (i : level) . forall (substT : SubstType i) . nat -> term substT -> term substT
+/;
+introOf /i substT n t/.
+revert /t/.
+sinduction /n/.
+reintro /Hind/.
+intro /t/.
+unroll /nshift_term/.
+destruct /n/ /| n/ >> reduce // >> auto.
+typecheck.
+apply /Hind/.
+omega.
+qed();
+
+reductions
+/
+nshift_term substT (zero) t --> t ;
+nshift_term substT (succ n) t --> traverse substT nat succ (shift_var substT) zero (nshift_term substT n t) ;
+unrolling nshift_term
+/;
+
+
+(*
+lemma "shift_term_var"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n m : nat) .
+  traverse substT S succ (shift_var substT) n (var substT m) = shift_var substT n m : term substT
+/;
+intro /i substT n m/.
+rewrite /-> traverse_var/.
+auto.
+qed();
+*)
+
+lemma "nshift_term_var"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n m : nat) .
+  nshift_term substT n (var substT m) = var substT (n + m) : term substT
+/;
+intro /i substT n m/.
+induction /n/ >> auto.
+intro /n IH/.
+rewrite /-> IH/.
+rewrite /-> traverse_var/.
+unfold /shift_var/.
+boolCase /n + m <? 0/ /Hb/ >> auto.
+qed();
+
+lemma "nshift_term_sum"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m n : nat) (t : term substT) .
+  nshift_term substT m (nshift_term substT n t) = nshift_term substT (m + n) t : term substT
+/;
+intro /i substT m n t/.
+induction /m/ >> auto.
+qed();
+
+lemma "nshift_term_succ_inner"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (t : term substT) .
+  traverse substT nat succ (shift_var substT) 0 (nshift_term substT n t) = nshift_term substT n (traverse substT nat succ (shift_var substT) 0 t) : term substT
+/;
+intro /i substT n t/.
+transitivity /nshift_term substT (n + 1) t/.
+{
+  rewrite /n + 1 = succ n : nat/.
+  {omega.}
+  reduce //.
+  auto.
+}
+{
+  rewrite /<- nshift_term_sum/.
+  auto.
+}
+qed();
+
+
+lemma "shift_term_commute"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (t : term substT) .
+  traverse substT nat succ (shift_var substT) (succ n) (traverse substT nat succ (shift_var substT) 0 t) =
+  traverse substT nat succ (shift_var substT) 0 (traverse substT nat succ (shift_var substT) n t) : term substT
+/;
+intro /i substT n t/.
+rewrite /-> traverse_compose at all/.
+apply /traverse_parametric substT (fn (p p' : nat & nat) . p #2 = p' #1 : nat &g p #1 = p #2 + 1 + n : nat & p' #2 = p #2 + n : nat)/ >> reduce // >> auto.
+{
+  intro /[m j] [j' m']/ >> reduce //.
+  intro /[H1 [H2 H3]]/.
+  unhide.
+  subst /j'/.
+  auto.
+}
+{
+  clear /t/.
+  intro /[m j] [j' m']/ >> reduce //.
+  intro /k [H1 [H2 H3]]/.
+  unhide.
+  subst /j'/.
+  subst /m/.
+  subst /m'/.
+  unfold /shift_var at 1/.
+  boolCase /k <? j/ /Hb/.
+  {
+    rewrite /-> traverse_var/.
+    unfold /shift_var at 2/.
+    boolCase /k <? j + n/ /Hb'/.
+    1:{omega.}
+    rewrite /-> traverse_var/.
+    clear /Hb'/.
+    unfold /shift_var/.
+    boolCase /k <? j + 1 + n/ /Hb'/.
+    1:{omega.}
+    clear /Hb'/.
+    unfold /shift_var/.
+    boolCase /k <? j/ /Hb'/.
+    1:{omega.}
+    clear /Hb'/.
+    auto.
+  }
+  {
+    rewrite /-> traverse_var/.
+    unfold /shift_var at 2/.
+    boolCase /k <? j + n/ /Hb'/.
+    {
+      rewrite /-> traverse_var/.
+      unfold /shift_var/.
+      boolCase /succ k <? j + 1 + n/ /Hb''/.
+      1:{omega.}
+      clear /Hb''/.
+      unfold /shift_var/.
+      boolCase /k <? j/ /Hb''/.
+      {omega.}
+      clear /Hb''/.
+      auto.
+    }
+    {
+      rewrite /-> traverse_var/.
+      unfold /shift_var/.
+      boolCase /succ k <? j + 1 + n/ /Hb''/.
+      {omega.}
+      clear /Hb''/.
+      unfold /shift_var/.
+      boolCase /succ k <? j/ /Hb''/.
+      {omega.}
+      clear /Hb''/.
+      auto.
+    }
+  }
+}
+qed();
+
+lemma "nshift_term_commute"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m n : nat) (t : term substT) .
+  n <= m
+  -> traverse substT nat succ (shift_var substT) m (nshift_term substT n t) = nshift_term substT n (traverse substT nat succ (shift_var substT) (m - n) t) : term substT
+/;
+intro /i substT m n/.
+revert /m/.
+induction /n/ >> auto.
+intro /n Hind m t H/.
+destruct /m/ /| m/.
+{omega.}
+rewrite /-> shift_term_commute/.
+compat.
+apply /Hind/.
+omega.
+qed();
+
+lemma "nshift_term_commute_eq"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (t : term substT) .
+  traverse substT nat succ (shift_var substT) n (nshift_term substT n t) = nshift_term substT (succ n) t : term substT
+/;
+intro /i substT n t/.
+reduce //.
+rewrite /-> nshift_term_succ_inner/.
+rewrite /0 = n - n : nat/.
+{omega.}
+apply /nshift_term_commute/.
+omega.
+qed();
+
+definerec /nshift_sub substT n s/
+/
+  nat_case n s (fn n' . shift_sub substT (nshift_sub substT n' s))
+//
+  intersect (i : level) . forall (substT : SubstType i) . nat -> sub substT -> sub substT
+/;
+introOf /i substT n s/.
+sinduction /n/.
+reintro /Hind/.
+unroll /nshift_sub/.
+destruct /n/ /| n/ >> reduce // >> auto.
+typecheck.
+apply /Hind/.
+omega.
+qed();
+
+reductions
+/
+  nshift_sub substT (zero) s --> s ;
+  nshift_sub substT (succ n) s --> shift_sub substT (nshift_sub substT n s) ;
+  unrolling nshift_sub
+/;
+
+
+lemma "nshift_sub_dot"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (t : term substT) (s : sub substT) .
+  nshift_sub substT n (dot t s) = dot (nshift_term substT n t) (nshift_sub substT n s) : sub substT
+/;
+intro /i substT n t s/.
+induction /n/ >> reduce // >> auto.
+intro /n Hind/.
+rewrite /-> Hind/.
+reflexivity.
+qed();
+
+lemma "nshift_sub_sh"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m n : nat) .
+  nshift_sub substT m (sh n) = sh (m + n) : sub substT
+/;
+intro /i substT m n/.
+induction /m/ >> reduce // >> auto.
+intro /m Hind/.
+rewrite /-> Hind/.
+reduce //.
+reflexivity.
+qed();
+
+
+lemma "trunc_shift_sub"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s : sub substT) .
+  trunc substT n (shift_sub substT s) = shift_sub substT (trunc substT n s) : sub substT
+/;
+intro /i substT n/.
+induction /n/ >> auto.
+intro /n Hind s/.
+destruct /s/ /{t s | m}/ >> auto.
+qed();
+
+lemma "trunc_nshift_sub"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n m : nat) (s : sub substT) .
+    trunc substT n (nshift_sub substT m s) = nshift_sub substT m (trunc substT n s) : sub substT
+/;
+intro /i substT n m s/.
+induction /m/ >> auto.
+intro /m Hind/.
+rewrite /-> trunc_shift_sub/.
+auto.
+qed();
+
+(*
+lemma "nshift_sub_sum"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m n : nat) (s : sub substT) .
+    nshift_sub substT m (nshift_sub substT n s) = nshift_sub substT (m + n) s : sub substT
+/;
+intro /i substT m n s/.
+induction /m/ >> auto.
+qed();
+*)
+
+lemma "nshift_sub_succ_inner"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s : sub substT) .
+  shift_sub substT (nshift_sub substT n s) = nshift_sub substT n (shift_sub substT s) : sub substT
+/;
+intro /i substT n s/.
+induction /n/ >> auto.
+qed();
+
+lemma "shift_sub_trunc"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s : sub substT) .
+  shift_sub substT (trunc substT n s) = trunc substT n (shift_sub substT s) : sub substT
+/;
+intro /i substT n s/.
+revert /n/.
+induction /s/ >> reduce //.
+{
+  intro /t s Hind n/.
+  destruct /n/ /| n/ >> auto.
+}
+{
+  intro /m n/.
+  destruct /n/ /| n/ >> auto.
+}
+qed();
+
+
+lemma "trunc_under"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m n : nat) (s : sub substT) .
+  m <= n
+  -> trunc substT m (under substT n s) = nshift_sub substT m (under substT (n - m) s) : sub substT
+/;
+intro /i substT m/.
+induction /m/ >> auto.
+intro /m Hind n s H/.
+reduce //.
+rewrite /-> trunc_succ_inner/.
+rewrite /-> trunc1_under/.
+{omega.}
+rewrite /-> trunc_shift_sub/.
+rewrite /-> Hind/.
+{omega.}
+reflexivity.
+qed();
+
+lemma "project_under_lt"
+/  
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s : sub substT) (j : nat) .
+    j < n
+    -> project substT (under substT n s) j = var substT j : term substT
+/;
+intro /i substT n s j H/.
+unfold /project/.
+rewrite /-> trunc_under/.
+{omega.}
+remember /n - j/ /nat/ /x/ /Hx/.
+destruct /x/ /| x/.
+{omega.}
+reduce //.
+rewrite /-> nshift_sub_dot/.
+rewrite /-> nshift_term_var/.
+reduce //.
+compat.
+omega.
+qed();
+
+lemma "trunc_under_more"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m n : nat) (s : sub substT) .
+    n <= m
+    -> trunc substT m (under substT n s) = trunc substT (m - n) (nshift_sub substT n s) : sub substT
+/;
+intro /i substgT m n s H/.
+rewrite /m = (m - n) + n : nat/.
+{omega.}
+rewrite /<- trunc_sum/.
+compat.
+rewrite /-> trunc_under/.
+rewrite /n - n = 0 : nat/.
+{omega.}
+auto.
+qed();
+
+lemma "project_under_ge_nshift"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s : sub substT) (j : nat) .
+    n <= j
+    -> project substT (under substT n s) j = nshift_term substT n (project substT s (j - n)) : term substT
+/;
+intro /i substT n s j H/.
+unfold /project/.
+rewrite /-> trunc_under_more/ >> auto.
+rewrite /-> trunc_nshift_sub/.
+remember /j - n/ /_/ /x/ /Hx/.
+revert /n s j H Hx/.
+induction /x/.
+{
+  intro /n s j H Hx/.
+  destruct /s/ /{t s | m}/.
+  {
+    rewrite /-> nshift_sub_dot/.
+    auto.
+  }
+  {
+    rewrite /-> nshift_sub_sh/.
+    rewrite /-> nshift_term_var/.
+    auto.
+  }
+}
+{
+  intro /x Hind n s j H Hx/.
+  destruct /s/ /{t s | m}/ >> reduce //.
+  {
+    apply /Hind n s (j - 1)/ >> omega.
+  }
+  {
+    rewrite /-> nshift_sub_sh/.
+    rewrite /-> nshift_term_var/.
+    auto.
+  }
+}
+qed();
+
+
+lemma "subst_shift_sub_helper"
+/
+  intersect (i : level) .
+  forall (substT : SubstType i) (s : sub substT) (n : nat) (j : nat) (x : sub substT) .
+  not (j < n) ->
+(fnind sub_fn : forall (v0 : sub [substT]) . term substT of
+ | dot t v0 . t
+ | sh i1 . var substT i1)
+  (shift_sub substT (nshift_sub substT n x))
+  = traverse
+      substT
+      nat
+      succ
+      (shift_var substT)
+      n
+      ((fnind sub_fn : forall (v0 : sub [substT]) . term substT of
+        | dot t v0 . t
+        | sh i1 . var substT i1) (nshift_sub substT n x))
+  : term substT
+/;
+intro /i substT s n j x Hb/.
+destruct /x/ /{t x | m}/ >> reduce //.
+{
+  rewrite /-> nshift_sub_dot/.
+  rewrite /-> nshift_sub_dot/.
+  reduce //.
+  symmetry.
+  apply /nshift_term_commute_eq/.
+}
+{
+  rewrite /-> nshift_sub_sh at all/.
+  reduce //.
+  rewrite /-> traverse_var/.
+  unfold /shift_var/.
+  boolCase /(n + m) <? n/ /Hb'/ >> auto.
+  omega.
+}
+qed();
+
+lemma "subst_shift_sub"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (s : sub substT) (t : term substT) .
+    subst substT (shift_sub substT s) t = traverse substT nat succ (shift_var substT) 0 (subst substT s t) : term substT
+/;
+intro /i substT s t/.
+unfold /subst at all/.
+rewrite /-> traverse_compose/.
+apply /traverse_parametric substT
+(
+  fn (s1 : sub substT) (p : nat & sub substT) .
+    (s1 = under substT (p #1) (shift_sub substT s) : sub substT)
+  & ((p #2) = under substT (p #1) s : sub substT)
+)/ >> auto.
+{
+  clear /t/.
+  intro /s1 [n s2]/.
+  reduce //.
+  intro /[H1 H2]/.
+  subst /s1/.
+  subst /s2/.
+  auto.
+}
+{
+  clear /t/.
+  intro /s1 [n s2] j/.
+  reduce //.
+  intro /[H1 H2]/.
+  subst /s1/.
+  subst /s2/.
+  boolCase /j <? n/ /Hb/.
+  {
+    rewrite /-> project_under_lt at all/ >> auto.
+    rewrite /-> traverse_var/.
+    unfold /shift_var/.
+    boolCase /j <? n/ /Hb'/ >> auto.
+    omega.
+  }
+  {
+    unfold /project at all/.
+    rewrite /-> trunc_under_more at all/.
+    {omega.}
+    {omega.}
+    rewrite /-> trunc_nshift_sub at all/.
+    rewrite /-> trunc_shift_sub/.
+    rewrite /<- nshift_sub_succ_inner/.
+    apply /subst_shift_sub_helper substT s n j/ >> auto.
+  }
+}
+qed();
+
+
+lemma "subst_dot_shift_term"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t : term substT) (s : sub substT) (t' : term substT) .
+    subst substT (dot t s) (traverse substT nat succ (shift_var substT) 0 t') = subst substT s t' : term substT
+/;
+intro /i substT t s t'/.
+unfold /subst at all/.
+rewrite /-> traverse_compose/.
+apply /traverse_parametric substT
+(fn p s2 . (p #1) = under substT (p #2) (dot t s) : sub substT & s2 = under substT (p #2) s : sub substT)
+/ >> auto.
+{
+  clear /t'/.
+  intro /[s1 j] s2/.
+  reduce //.
+  intro /[H1 H2]/.
+  subst /s1/.
+  subst /s2/.
+  auto.
+}
+{
+  clear /t'/.
+  intro /[s1 j] s2 k/.
+  reduce //.
+  intro /[H1 H2]/.
+  subst /s1/.
+  subst /s2/.
+  reduce //.
+  fold /subst substT (under substT j (dot t s)) (shift_var substT j k)/.
+  unfold /shift_var/.
+  boolCase /k <? j/ /Hb/.
+  {
+    rewrite /-> subst_var/.
+    rewrite /-> project_under_lt at all/ >> auto.
+  }
+  {
+    rewrite /-> subst_var/.
+    rewrite /-> project_under_ge_nshift at all/.
+    {omega.}
+    {omega.}
+    compat.
+    rewrite /succ k - j = succ (k - j) : nat/ >> auto.
+    omega.
+  }
+}
+qed();
+
+
+lemma "shift_term_eq_subst_under_sh"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t : term substT) (n : nat) .
+    traverse substT nat succ (shift_var substT) n t = subst substT (under substT n (sh 1)) t : term substT
+/;
+intro /i substT t n/.
+unfold /subst/.
+apply /traverse_parametric substT (fn (n : nat) (s : sub substT) . s = under substT n (sh 1) : sub substT)/ >> auto.
+{
+  clear /t n/.
+  intro /n s/.
+  reduce //.
+  intro /H1/.
+  subst /s/.
+  auto.
+}
+{
+  clear /t n/.
+  intro /n s j/.
+  reduce //.
+  intro /H1/.
+  subst /s/.
+  unfold /shift_var/.
+  boolCase /j <? n/ /Hb/.
+  {
+    symmetry.
+    apply /project_under_lt/ >> auto.
+  }
+  {
+    rewrite /-> project_under_ge_nshift/.
+    {omega.}
+    rewrite /-> project_sh/.
+    rewrite /-> nshift_term_var/.
+    compat.
+    omega.
+  }
+}
+qed();
+
+
+lemma "shift_term_eq_sh"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t : term substT) .
+    traverse substT nat succ (shift_var substT) 0 t = subst substT (sh 1) t : term substT
+/;
+intro /i substT t/.
+apply /shift_term_eq_subst_under_sh/.
+qed();
+
+
+lemma "shift_sub_eq_compose_sh"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (s : sub substT) .
+    shift_sub substT s = compose substT s (sh 1) : sub substT
+/;
+intro /i substT s/.
+induction /s/.
+{
+  intro /t s IH/.
+  compat.
+  {
+    apply /shift_term_eq_sh/.
+  }
+  {
+    apply /IH/.
+  }
+}
+{
+  intro /m/.
+  rewrite /-> trunc_sh/.
+  compat.
+  omega.
+}
+qed();
+
+
+lemma "compose_shift_sub_left"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (s1 s2 : sub substT) .
+    compose substT s1 (shift_sub substT s2) = shift_sub substT (compose substT s1 s2) : sub substT
+/;
+intro /i substT s1 s2/.
+induction /s1/.
+{
+  intro /t s1' IH/.
+  compat >> auto.
+  apply /subst_shift_sub/.
+}
+{
+  intro /m/.
+  symmetry.
+  reduce //.
+  apply /shift_sub_trunc/.
+}
+qed();
+
+lemma "compose_shift_sub_right"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (s1 s2 : sub substT) (t : term substT) .
+    compose substT (shift_sub substT s1) (dot t s2) = compose substT s1 s2 : sub substT
+/;
+intro /i substT s1 s2 t/.
+induction /s1/.
+{
+  intro /t' s1' IH/.
+  compat.
+  {
+    apply /subst_dot_shift_term/.
+  }
+  {
+    apply /IH/.
+  }
+}
+{
+  auto.
+}
+qed();
+
+lemma "trunc_compose"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (j : nat) (s1 s2 : sub substT) .
+    trunc substT j (compose substT s1 s2) = compose substT (trunc substT j s1) s2 : sub substT
+/;
+intro /i substT j/.
+induction /j/ >> auto.
+intro /n IH s1 s2/.
+destruct /s1/ /{t s1' | m}/.
+{
+  apply /IH/.
+}
+{
+  reduce //.
+  rewrite /-> trunc_sum/.
+  compat.
+  omega.
+}
+qed();
+
+lemma "project_compose_helper"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (j : nat) (s1 s2 x : sub substT) .
+  (fnind sub_fn : forall (v0 : sub [substT]) . term substT of
+  | dot t v0 . t
+  | sh i1 . var substT i1) (compose substT x s2)
+    = subst
+        substT
+        s2
+        ((fnind sub_fn : forall (v0 : sub [substT]) . term substT of
+          | dot t v0 . t
+          | sh i1 . var substT i1) x)
+    : term substT
+/;
+intro /i substT j s1 s2 s/.
+destruct /s/ /{t s | m}/ >> reduce // >> auto.
+rewrite /-> subst_var/.
+unfold /project/.
+auto.
+qed();
+
+lemma "project_compose"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (j : nat) (s1 s2 : sub substT) .
+    project substT (compose substT s1 s2) j = subst substT s2 (project substT s1 j) : term substT
+/;
+intro /i substT j s1 s2/.
+unfold /project at all/.
+rewrite /-> trunc_compose/.
+apply /project_compose_helper substT j s1 s2/ >> auto.
+qed();
+
+
+lemma "subst_compose"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t : term substT) (s1 s2 : sub substT) .
+    subst substT (compose substT s2 s1) t = subst substT s1 (subst substT s2 t) : term substT
+/;
+intro /i substT t s1 s2/.
+unfold /subst at all/.
+rewrite /-> traverse_compose/.
+apply /traverse_parametric substT (
+  fn (s : sub substT) (p : sub substT & sub substT) . s = compose substT (p #2) (p #1) : sub substT
+)/ >> auto >> reduce //.
+{
+  clear /t s1 s2/.
+  intro /s [s1 s2]/.
+  intro /H/.
+  subst /s/.
+  unfold /subst at all/.
+  reduce //.
+  compat.
+  {
+    rewrite /-> traverse_var/.
+    reduce //.
+    auto.
+  }
+  {
+    rewrite /<- compose_shift_sub_left/.
+    rewrite /-> compose_shift_sub_right/.
+    reflexivity.
+  }
+}
+{
+  clear /t s1 s2/.
+  intro /s [s1 s2] j/.
+  intro /H/.
+  subst /s/.
+  reduce //.
+  rewrite /-> project_compose/.
+  unfold /subst/.
+  auto.
+}
+qed();
+
+lemma "compose_assoc"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (s1 s2 s3 : sub substT) .
+    compose substT (compose substT s1 s2) s3 = compose substT s1 (compose substT s2 s3) : sub substT
+/;
+intro /i substT s1 s2 s3/.
+induction /s1/.
+{
+  intro /t s1 Hind/.
+  compat >> autoWith /subst_compose/.
+}
+{
+  intro /m/.
+  symmetry.
+  apply /trunc_compose/.
+}
+qed();
+
+
+lemma "compose_dot"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t : term substT) (s1 s2 : sub substT) .
+  compose substT (dot t s1) s2 = dot (subst substT s2 t) (compose substT s1 s2) : sub substT
+/;
+auto.
+qed();
+
+lemma "compose_sh_0"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (s : sub substT) .
+  compose substT (sh 0) s = s : sub substT
+/;
+auto.
+qed();
+
+lemma "compose_sh_succ_dot"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t : term substT) (s : sub substT) (n : nat) .
+  compose substT (sh (succ n)) (dot t s) = compose substT (sh n) s : sub substT
+/;
+auto.
+qed();
+
+lemma "compose_sh_sh"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m n : nat) .
+  compose substT (sh m) (sh n) = sh (m + n) : sub substT
+/;
+reduce //.
+intro /i substT m n/.
+apply /trunc_sh/.
+qed();
+
+lemma "subst_under_id"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (t : term substT) .
+  subst substT (under substT n (sh 0)) t = t : term substT
+/;
+intro /i substT m t/.
+unfold /subst/.
+apply /traverse_id substT (fn (s : sub substT) . exists (n : nat) . s = under substT n (sh 0) : sub substT)/ >> reduce //.
+2:{
+  exists /m/.
+  auto.
+}
+{
+  clear /t m/.
+  intro /s [n H]/.
+  subst /s/.
+  exists /succ n/.
+  reduce //.
+  reflexivity.
+}
+{
+  clear /t m/.
+  intro /s m [n H]/.
+  subst /s/.
+  boolCase /m <? n/ /Hb/.
+  {
+    apply /project_under_lt/.
+    hyp /Hb/.
+  }
+  {
+    rewrite /-> project_under_ge_nshift/.
+    {omega.}
+    rewrite /-> project_sh/.
+    rewrite /-> nshift_term_var/.
+    compat.
+    omega.
+  }
+}
+qed();
+
+lemma "subst_id"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t : term substT) .
+  subst substT (sh 0) t = t : term substT
+/;
+intro /i substT t/.
+apply /subst_under_id substT 0 t/.
+qed();
+
+lemma "compose_id_right"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (s : sub substT) .
+  compose substT s (sh 0) = s : sub substT
+/;
+intro /i substT s/.
+induction /s/.
+{
+  intro /t s H/.
+  compat.
+  {apply /subst_id/.}
+  {apply /H/.}
+}
+{
+  intro /n/.
+  rewrite /-> trunc_sh/.
+  compat.
+  omega.
+}
+qed();
+
+lemma "trunc_eq_compose_sh"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s : sub substT) .
+    trunc substT n s = compose substT (sh n) s : sub substT
+/;
+intro /i substT n s/.
+destruct /n/ /| n/ >> auto.
+qed();
+
+lemma "subst1_shift1"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t t' : term substT) .
+    subst substT (dot t (sh 0)) (subst substT (sh 1) t') = t' : term substT
+/;
+intro /i substT t t'/.
+rewrite /<- subst_compose/.
+rewrite /-> compose_sh_succ_dot/.
+rewrite /-> compose_sh_0/.
+apply /subst_id/.
+qed();
+
+lemma "under_zero"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (s : sub substT) .
+    under substT 0 s = s : sub substT
+/;
+auto.
+qed();
+
+lemma "under_succ"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s : sub substT) .
+    under substT (succ n) s = dot (var substT 0) (compose substT (under substT n s) (sh 1)) : sub substT
+/;
+intro /i substT n s/.
+reduce //.
+compat.
+apply /shift_sub_eq_compose_sh/.
+qed();
+
+lemma "dist_compose_under"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s1 s2 : sub substT) .
+    compose substT (under substT n s1) (under substT n s2) = under substT n (compose substT s1 s2) : sub substT
+/;
+intro /i substT n s1 s2/.
+induction /n/.
+{
+  reflexivity.
+}
+{
+  intro /n IH/.
+  compat.
+  {
+    unfold /subst/.
+    apply /traverse_var/.
+  }
+  {
+    rewrite /-> compose_shift_sub_right/.
+    rewrite /-> compose_shift_sub_left/.
+    compat.
+    apply /IH/.
+  }
+}
+qed();
+
+lemma "subst_dot0_sh"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t : term substT) .
+    subst substT (dot (var substT 0) (sh 1)) t = t : term substT
+/;
+intro /i substT t/.
+apply /subst_under_id substT 1 t/.
+qed();
+
+lemma "nshift_term_eq_sh"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (t : term substT) .
+    nshift_term substT n t = subst substT (sh n) t : term substT
+/;
+intro /i substT n t/.
+induction /n/.
+{
+  symmetry.
+  apply /subst_id/.
+}
+{
+  intro /n IH/.
+  rewrite /-> IH/.
+  rewrite /-> shift_term_eq_sh/.
+  rewrite /<- subst_compose/.
+  rewrite /-> compose_sh_sh/.
+  compat.
+  compat.
+  omega.
+}
+qed();
+
+lemma "compose_sh_under_leq"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m n : nat) (s : sub substT) .
+    m <= n
+    -> compose substT (sh m) (under substT n s) = compose substT (under substT (n - m) s) (sh m) : sub substT
+/;
+intro /i substT m n s Hleq/.
+revert /n Hleq/.
+induction /m/.
+{
+  intro /n _/.
+  rewrite /-> compose_id_right/.
+  reflexivity.
+}
+{
+  intro /m IH n Hleq/.
+  destruct /n/ /| n'/.
+  {omega.}
+  rewrite /-> under_succ/.
+  reduce //.
+  rewrite /-> trunc_compose/.
+  rewrite /-> IH/.
+  {omega.}
+  rewrite /-> compose_assoc/.
+  compat.
+  rewrite /-> compose_sh_sh/.
+  compat.
+  omega.
+}
+qed();
+
+lemma "compose_sh_under"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m n : nat) (s : sub substT) .
+    compose substT (sh m) (under substT (m + n) s) = compose substT (under substT n s) (sh m) : sub substT
+/;
+intro /i substT m n s/.
+rewrite /-> compose_sh_under_leq/.
+{omega.}
+compat.
+compat.
+omega.
+qed();
+
+lemma "compose_sh_under_geq"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m n : nat) (s : sub substT) .
+    n <= m
+    -> compose substT (sh m) (under substT n s) = compose substT (sh (m - n)) (compose substT s (sh n)) : sub substT
+/;
+intro /i substT m n s Hgeq/.
+rewrite /m = m - n + n : nat at 0/.
+{omega.}
+rewrite /<- compose_sh_sh/.
+rewrite /-> compose_assoc substT (sh (m - n)) (sh n)/.
+compat.
+rewrite /-> compose_sh_under_leq/.
+rewrite /n - n = 0 : nat/.
+{omega.}
+reduce //.
+reflexivity.
+qed();
+
+lemma "compose_sh1_under"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s : sub substT) .
+    compose substT (sh 1) (under substT (succ n) s) = compose substT (under substT n s) (sh 1) : sub substT
+/;
+intro /i substT n s/.
+exact /compose_sh_under substT 1 n s/.
+qed();
+
+lemma "project_under_ge"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (n : nat) (s : sub substT) (m : nat) .
+    n <= m
+    -> project substT (under substT n s) m = subst substT (sh n) (project substT s (m - n)) : term substT
+/;
+intro /i substT n s m H/.
+rewrite /<- nshift_term_eq_sh/.
+apply /project_under_ge_nshift/ >> auto.
+qed();
+
+lemma "split_dot"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t : term substT) (s : sub substT) .
+    dot t s = compose substT (dot (var substT 0) (compose substT s (sh 1))) (dot t (sh 0)) : sub substT
+/;
+intro /i substT t s/.
+reduce //.
+compat.
+{
+  rewrite /-> subst_var/.
+  reduce //.
+  reflexivity.
+}
+{
+  rewrite /-> compose_assoc/.
+  reduce //.
+  rewrite /-> compose_id_right/.
+  reflexivity.
+}
+qed();
+
+lemma "split_dot_compose"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (m : term substT) (s : sub substT) (t : term substT) .
+    subst substT (dot m s) t = subst substT (dot m (sh 0)) (subst substT (dot (var substT 0) (compose substT s (sh 1))) t) : term substT
+/;
+intro /i substT m s t/.
+rewrite /-> split_dot/.
+rewrite /<- subst_compose/.
+reflexivity.
+qed();
+
+lemma "subst_dot01_sh"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t : term substT) .
+    subst substT (dot (var substT 0) (dot (var substT 1) (sh 2))) t = t : term substT
+/;
+intro /i substT t/.
+so /subst_under_id substT 2 t/ /H/.
+reduce /H/.
+rewrite /-> traverse_var in H/.
+rewrite /-> shift_var_ge in H/.
+exact /H/.
+qed();
+
+lemma "subst_dot1_sh"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (t : term substT) .
+    subst substT (dot (var substT 1) (sh 2)) t = subst substT (sh 1) t : term substT
+/;
+intro /i substT t/.
+transitivity /subst substT (sh 1) (subst substT (dot (var substT 0) (sh 1)) t)/.
+{
+  rewrite /<- subst_compose/.
+  compat.
+  reduce //.
+  compat.
+  rewrite /-> subst_var/.
+  auto.
+}
+{
+  rewrite /-> subst_dot0_sh/.
+  reflexivity.
+}
+qed();
+
+lemma "subst_under_var"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  forall (s : sub substT) (n m : nat) .
+    n < m
+    -> subst substT (under substT m s) (var substT n) = var substT n : term substT
+/;
+intro /i substT s n m Hlt/.
+rewrite /-> subst_var/.
+rewrite /-> project_under_lt/ >> auto.
+qed();
+
+
+endModule ();

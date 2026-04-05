@@ -110,23 +110,56 @@ typedef
 
 defineInd /{S} enter resolve/
 /
-  traverse : term -> S -> term of
+  traverse' : term -> S -> term of
   | Var i . fn s . resolve s i
   | Num n . fn s . Num n
-  | Lam M . fn s . Lam (traverse M (enter s))
-  | App M N . fn s . App (traverse M s) (traverse N s)
-  | Fix M . fn s . Fix (traverse M s)
-  | Succ M . fn s . Succ (traverse M s)
-  | Pred M . fn s . Pred (traverse M s)
-  | Ifz M N P . fn s . Ifz (traverse M s) (traverse N s) (traverse P s)
+  | Lam M . fn s . Lam (traverse' M (enter s))
+  | App M N . fn s . App (traverse' M s) (traverse' N s)
+  | Fix M . fn s . Fix (traverse' M s)
+  | Succ M . fn s . Succ (traverse' M s)
+  | Pred M . fn s . Pred (traverse' M s)
+  | Ifz M N P . fn s . Ifz (traverse' M s) (traverse' N s) (traverse' P s)
 //
   intersect (i : level) . forall (S : U i) . (S -> S) -> (S -> nat -> term) -> term -> S -> term
 /;
 
+define /traverse enter resolve s M/
+/
+  traverse' enter resolve M s
+//
+  intersect (i : level) (S : U i) . (S -> S) -> (S -> nat -> term) -> S -> term -> term
+/;
+
+unfold /traverse/.
+inference.
+repeatn 6 typecheck1.
+{
+  typecheck.
+}
+{
+  typecheck.
+}
+{
+  typecheck.
+}
+{
+  
+  typecheck
+}
+
+typecheck >> inference >> auto.
+{
+ auto
+}
+typechecker (); >> inference.
+
+
+
+
 lemma "traverse_var"
 /
   intersect (i : level) .
-  forall (S : U i)  (enter : S -> S) (resolve : S -> nat -> term) (s : S) (n : nat) .
+  forall (S : U i) (enter : S -> S) (resolve : S -> nat -> term) (s : S) (n : nat) .
     `traverse S enter resolve (Var n) s = resolve s n : term
 /;
 
@@ -181,6 +214,40 @@ induction /t/ >> auto.
   auto.
 }
 qed ();
+
+lemma "traverse_compose"
+/
+  intersect (i : level) .
+    forall (S S' : U i) (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term) (resolve' : S' -> nat -> term) (s : S) (s' : S') (M : term) .
+      `traverse S enter resolve (`traverse S' enter' resolve' M s') s
+        = `traverse (S & S')
+            (fn (p : S & S') . (enter (p #1), enter' (p #2)))
+            (fn (p : S & S') (n : nat) . `traverse S enter resolve (resolve' (p #2) n) (p #1))
+            M
+            (s, s') : term
+/;
+
+intro /i S S' enter enter' resolve resolve' s s' M/.
+revert /s s'/.
+induction /M/ >> auto.
+{
+  intro /M IHM N IHN s s'/.
+  auto.
+}
+{
+  intro /M IHM N IHN P IHP s s'/.
+  auto.
+}
+qed ();
+
+
+   intersect (S S' : U i) . forall (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term) (resolve' : S' -> nat -> term) (s : S) (s' : S') (t : term) .
+      var_traverse #2 enter resolve s (var_traverse #2 enter' resolve' s' t)
+        = var_traverse #2
+          (fn (p : S & S') . (enter (p #1), enter' (p #2)))
+          (fn (p : S & S') (n : nat) . var_traverse #2 enter resolve (p #1) (resolve' (p #2) n))
+          (s, s') t : term *)
+/
 
     (* (
       intersect (S : U i) . forall (R : S -> U i) (enter : S -> S) (resolve : S -> nat -> term) (s : S) (t : term) .
