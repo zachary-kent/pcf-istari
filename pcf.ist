@@ -1,13 +1,12 @@
 
-(* File.load "../code/divide.isto"; *)
+File.load "subst.isto";
 
 openModule /Bool/;
 openModule /Eventually/;
 openModule /List/;
 openModule /Option/;
-(* openModule /Divide/; *)
 
-
+(* 
 define /stream a/
 /
   rec X . a & future (ev X)
@@ -19,7 +18,7 @@ inference.
 unfold /stream/.
 typecheck.
 qed ();
-
+ *)
 
 define /later_app {a b} ff fx/
 /
@@ -127,11 +126,11 @@ defineInd /S enter resolve/
 lemma "traverse_var"
 /
   intersect (i : level) .
-  forall (S : U i) (enter : S -> S) (resolve : S -> nat -> term) (s : S) (n : nat) .
+  forall (S : U i) (enter : S -> S) (resolve : S -> nat -> term) (n : nat) (s : S) .
     traverse S enter resolve (Var n) s = resolve s n : term
 /;
 
-intro /i S enter resolve s n/.
+intro /i S enter resolve n s/.
 reduce //.
 auto.
 qed ();
@@ -142,15 +141,15 @@ lemma "traverse_parametric"
     forall 
       (S S' : U i) (R : S -> S' -> U i) 
       (enter : S -> S) (enter' : S' -> S') 
-      (resolve : S -> nat -> term) (resolve' : S' -> nat -> term) 
-      (s : S) (s' : S') (t : term) .
+      (resolve : S -> nat -> term) (resolve' : S' -> nat -> term)
+      (t : term) (s : S) (s' : S') .
         (forall (s : S) (s' : S') . R s s' -> R (enter s) (enter' s')) ->
         (forall (s : S) (s' : S') (n : nat) . R s s' -> resolve s n = resolve' s' n : term) ->
         R s s' ->
         traverse S enter resolve t s = traverse S' enter' resolve' t s' : term
 /;
 
-intro /i S S' R enter enter' resolve resolve' s s' t Hrelenter Hagree/.
+intro /i S S' R enter enter' resolve resolve' t s s' Hrelenter Hagree/.
 revert /s s'/.
 induction /t/ >> auto.
 {
@@ -186,7 +185,7 @@ qed ();
 lemma "traverse_compose"
 /
   intersect (i : level) .
-    forall (S S' : U i) (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term) (resolve' : S' -> nat -> term) (s : S) (s' : S') (M : term) .
+    forall (S S' : U i) (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term) (resolve' : S' -> nat -> term) (M : term) (s : S) (s' : S') .
       traverse S enter resolve (traverse S' enter' resolve' M s') s
         = traverse (S & S')
             (fn (p : S & S') . (enter (p #1), enter' (p #2)))
@@ -195,7 +194,7 @@ lemma "traverse_compose"
             (s, s') : term
 /;
 
-intro /i S S' enter enter' resolve resolve' s s' M/.
+intro /i S S' enter enter' resolve resolve' M s s'/.
 revert /s s'/.
 induction /M/ >> auto.
 {
@@ -209,41 +208,17 @@ induction /M/ >> auto.
 qed ();
 
 
-   intersect (S S' : U i) . forall (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term) (resolve' : S' -> nat -> term) (s : S) (s' : S') (t : term) .
-      var_traverse #2 enter resolve s (var_traverse #2 enter' resolve' s' t)
-        = var_traverse #2
-          (fn (p : S & S') . (enter (p #1), enter' (p #2)))
-          (fn (p : S & S') (n : nat) . var_traverse #2 enter resolve (p #1) (resolve' (p #2) n))
-          (s, s') t : term *)
-/
-
-    (* (
-      intersect (S : U i) . forall (R : S -> U i) (enter : S -> S) (resolve : S -> nat -> term) (s : S) (t : term) .
-      (forall (s : S) . R s -> R (enter s))
-      -> (forall (s : S) (n : nat) . R s -> resolve s n = var_traverse #1 n : term)
-      -> R s
-      -> var_traverse #2 enter resolve s t = t : term
-    )
-    &
-    (
-      intersect (S S' : U i) . forall (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term) (resolve' : S' -> nat -> term) (s : S) (s' : S') (t : term) .
-      var_traverse #2 enter resolve s (var_traverse #2 enter' resolve' s' t)
-        = var_traverse #2
-          (fn (p : S & S') . (enter (p #1), enter' (p #2)))
-          (fn (p : S & S') (n : nat) . var_traverse #2 enter resolve (p #1) (resolve' (p #2) n))
-          (s, s') t : term *)
-
 lemma "traverse_id"
 /
   intersect (i : level) .
-    forall (S : U i) (R : S -> U i) (enter : S -> S) (resolve : S -> nat -> term) (s : S) (t : term) .
+    forall (S : U i) (R : S -> U i) (enter : S -> S) (resolve : S -> nat -> term) (t : term) (s : S) .
       (forall (s : S) . R s -> R (enter s)) ->
         (forall (s : S) (n : nat) . R s -> resolve s n = Var n : term) ->
           R s ->
           traverse S enter resolve t s = t : term
 /;
 
-intro /i S R enter resolve s t Hrelenter Hres/.
+intro /i S R enter resolve t s Hrelenter Hres/.
 revert /s/.
 induction /t/ >> auto.
 {
@@ -272,19 +247,23 @@ induction /t/ >> auto.
 }
 qed ();
 
+define /pcfSubstT/
+/
+  (term, Var, traverse)
+//
+  intersect (i : level) . Subst.SubstType i
+/;
 
+unfold /Subst.SubstType/.
+unfold /pcfSubstT/.
+typecheck.
+repeat split >> reduce //.
+{ auto. }
+{ apply /traverse_parametric/. }
+{ apply /traverse_id/. }
+{ apply /traverse_compose/. }
+qed ();
 
-      intersect (S : U i) . forall (R : S -> U i) (enter : S -> S) (resolve : S -> nat -> term) (s : S) (t : term) .
-      (forall (s : S) . R s -> R (enter s))
-      -> (forall (s : S) (n : nat) . R s -> resolve s n = var_traverse #1 n : term)
-      -> R s
-      -> var_traverse #2 enter resolve s t = t : term
-
-
-intersect (S : U i) . forall (enter : S -> S) (resolve : S -> nat -> term substT) (s : S) (n : nat) .
-  traverse substT enter resolve s (var substT n) = resolve s n : term substT
-
-{}
 
 define /SubstType i/
 /
