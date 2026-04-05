@@ -51,7 +51,8 @@ qed ();
 typedef
 /
   datatype
-    U 0
+    intersect (i : level) .
+    U i
   of
     ty : type =
     | Nat : ty
@@ -61,49 +62,180 @@ typedef
 typedef
 /
   datatype
-    U 0
+    intersect (i : level) .
+    U i
   of
-    exp : type =
-    | Var : nat -> exp
-    (* | Zero : forall (Gamma : ctx) . exp Gamma Nat *)
-    | Num : nat -> exp
-    | Lam : exp -> exp
-    | App : exp -> exp -> exp
-    | Fix : exp -> exp
-    | Succ : exp -> exp
-    | Pred : exp -> exp
-    | Ifz : exp -> exp -> exp -> exp
+    term : type =
+    | Var : nat -> term
+    (* | Zero : forall (Gamma : ctx) . term Gamma Nat *)
+    | Num : nat -> term
+    | Lam : term -> term
+    | App : term -> term -> term
+    | Fix : term -> term
+    | Succ : term -> term
+    | Pred : term -> term
+    | Ifz : term -> term -> term -> term
 /;
 
 typedef
 /
   datatype
-    U 0
+    intersect (i : level) .
+    U i
   of
-    has_type : list ty -> exp -> ty -> type =
-    | VarTyped : forall (Gamma : list ty) (i : nat) (sigma : ty) . (nth Gamma i = Some sigma : option ty) -> has_type Gamma (Var i) sigma
+    has_type : list ty -> term -> ty -> type =
+    | VarTyped : forall (Gamma : list ty) (idx : nat) (sigma : ty) . (nth Gamma idx = Some sigma : option ty) -> has_type Gamma (Var idx) sigma
     | NumTyped : forall (Gamma : list ty) (n : nat) . has_type Gamma (Num n) Nat
-    | LamTyped : forall (Gamma : list ty) (sigma tau : ty) (M : exp) . 
+    | LamTyped : forall (Gamma : list ty) (sigma tau : ty) (M : term) . 
         has_type (sigma :: Gamma) M tau -> has_type Gamma (Lam M) (Arrow sigma tau)
-    | AppTyped : forall (Gamma : list ty) (sigma tau : ty) (M N : exp) .
+    | AppTyped : forall (Gamma : list ty) (sigma tau : ty) (M N : term) .
         has_type Gamma M (Arrow sigma tau) ->
         has_type Gamma N sigma ->
           has_type Gamma (App M N) tau
-    | FixTyped : forall (Gamma : list ty) (sigma : ty) (M : exp) .
+    | FixTyped : forall (Gamma : list ty) (sigma : ty) (M : term) .
         has_type Gamma M (Arrow sigma sigma) ->
           has_type Gamma (Fix M) sigma
-    | SuccTyped : forall (Gamma : list ty) (M : exp) .
+    | SuccTyped : forall (Gamma : list ty) (M : term) .
         has_type Gamma M Nat ->
           has_type Gamma (Succ M) Nat
-    | PredTyped : forall (Gamma : list ty) (M : exp) .
+    | PredTyped : forall (Gamma : list ty) (M : term) .
         has_type Gamma M Nat ->
           has_type Gamma (Pred M) Nat
-    | IfzTyped : forall (Gamma : list ty) (M N P : exp) (sigma : ty) .
+    | IfzTyped : forall (Gamma : list ty) (M N P : term) (sigma : ty) .
         has_type Gamma M Nat ->
         has_type Gamma N sigma ->
         has_type Gamma P sigma ->
           has_type Gamma (Ifz M N P) sigma
 /;
+
+defineInd /{S} enter resolve/
+/
+  traverse : term -> S -> term of
+  | Var i . fn s . resolve s i
+  | Num n . fn s . Num n
+  | Lam M . fn s . Lam (traverse M (enter s))
+  | App M N . fn s . App (traverse M s) (traverse N s)
+  | Fix M . fn s . Fix (traverse M s)
+  | Succ M . fn s . Succ (traverse M s)
+  | Pred M . fn s . Pred (traverse M s)
+  | Ifz M N P . fn s . Ifz (traverse M s) (traverse N s) (traverse P s)
+//
+  intersect (i : level) . forall (S : U i) . (S -> S) -> (S -> nat -> term) -> term -> S -> term
+/;
+
+lemma "traverse_var"
+/
+  intersect (i : level) .
+  forall (S : U i)  (enter : S -> S) (resolve : S -> nat -> term) (s : S) (n : nat) .
+    traverse enter resolve (Var n) s = resolve s n : term
+/;
+
+intro /i S enter resolve s n/.
+reduce //.
+auto.
+qed ();
+
+
+
+intersect (S : U i) . forall (enter : S -> S) (resolve : S -> nat -> term substT) (s : S) (n : nat) .
+  traverse substT enter resolve s (var substT n) = resolve s n : term substT
+
+{}
+
+define /SubstType i/
+/
+  exists (term : U i) .
+  { var_traverse : (nat -> term) & (intersect (S : U i) . (S -> S) -> (S -> nat -> term) -> S -> term -> term)
+  |
+    (
+      intersect (S : U i) . forall (enter : S -> S) (resolve : S -> nat -> term) (s : S) (n : nat) .
+        var_traverse #2 enter resolve s (var_traverse #1 n) = resolve s n : term
+    )
+    &
+    (
+      intersect (S S' : U i) . forall (R : S -> S' -> U i) (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term) (resolve' : S' -> nat -> term) (s : S) (s' : S') (t : term) .
+      (forall (s : S) (s' : S') . R s s' -> R (enter s) (enter' s'))
+      -> (forall (s : S) (s' : S') (n : nat) . R s s' -> resolve s n = resolve' s' n : term)
+      -> R s s'
+      -> var_traverse #2 enter resolve s t = var_traverse #2 enter' resolve' s' t : term
+    )
+    &
+    (
+      intersect (S : U i) . forall (R : S -> U i) (enter : S -> S) (resolve : S -> nat -> term) (s : S) (t : term) .
+      (forall (s : S) . R s -> R (enter s))
+      -> (forall (s : S) (n : nat) . R s -> resolve s n = var_traverse #1 n : term)
+      -> R s
+      -> var_traverse #2 enter resolve s t = t : term
+    )
+    &
+    (
+      intersect (S S' : U i) . forall (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term) (resolve' : S' -> nat -> term) (s : S) (s' : S') (t : term) .
+      var_traverse #2 enter resolve s (var_traverse #2 enter' resolve' s' t)
+        = var_traverse #2
+          (fn (p : S & S') . (enter (p #1), enter' (p #2)))
+          (fn (p : S & S') (n : nat) . var_traverse #2 enter resolve (p #1) (resolve' (p #2) n))
+          (s, s') t : term
+    )
+  }
+//
+  forall (i : level) . U (1 + i)
+/;
+introOf /i/.
+unfold /SubstType/.
+typecheck.
+qed();
+
+
+lemma "traverse_var"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  intersect (S : U i) . forall (enter : S -> S) (resolve : S -> nat -> term substT) (s : S) (n : nat) .
+      traverse substT enter resolve s (var substT n) = resolve s n : term substT
+/;
+intro /i [termT [[traverseT varT] Hsub]]/.
+unfold /term at all, traverse, var/.
+intro /S enter resolve s n/.
+reduce /Hsub/.
+unhide.
+apply /Hsub/.
+qed();
+
+lemma "traverse_parametric"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  intersect (S S' : U i) . forall (R : S -> S' -> U i) (enter : S -> S) (enter' : S' -> S') (resolve : S -> nat -> term substT) (resolve' : S' -> nat -> term substT) (s : S) (s' : S') (t : term substT) .
+  (forall (s : S) (s' : S') . R s s' -> R (enter s) (enter' s'))
+  -> (forall (s : S) (s' : S') (n : nat) . R s s' -> resolve s n = resolve' s' n : term substT)
+  -> R s s'
+  -> traverse substT enter resolve s t = traverse substT enter' resolve' s' t : term substT
+/;
+intro /i [termT [[traverseT varT] Hsub]]/.
+unfold /term at all, traverse at all/.
+reduce /Hsub/.
+intro /S S' R enter enter' resolve resolve' s s' t H1 H2 H3/.
+unhide.
+apply /Hsub/ >> auto.
+qed();
+
+lemma "traverse_id"
+/
+  intersect (i : level) . forall (substT : SubstType i) .
+  intersect (S : U i) . forall (R : S -> U i) (enter : S -> S) (resolve : S -> nat -> term substT) (s : S) (t : term substT) .
+    (forall (s : S) . R s -> R (enter s))
+    -> (forall (s : S) (n : nat) . R s -> resolve s n = var substT n : term substT)
+    -> R s
+    -> traverse substT enter resolve s t = t : term substT
+/;
+intro /i [termT [[traverseT varT] Hsub]]/.
+unfold /term at all, traverse, var/.
+intro /S R enter resolve s t H1 H2 H3/.
+reduce /Hsub/.
+unhide.
+apply /Hsub/ >> auto.
+qed();
+
+typechecker ();
+
 
 
 typedef
@@ -142,21 +274,21 @@ typedef
   datatype
     U 0
   of
-    exp : ctx -> ty -> type =
-    | Var : forall (Gamma : ctx) (tau : ty) . bound tau Gamma -> exp Gamma tau
-    (* | Zero : forall (Gamma : ctx) . exp Gamma Nat *)
-    | Num : forall (Gamma : ctx) . nat -> exp Gamma Nat
-    | Lam : forall (Gamma : ctx) (sigma tau : ty) . exp (Extend Gamma sigma) tau -> exp Gamma (Arrow sigma tau)
-    | App : forall (Gamma : ctx) (sigma tau : ty) . exp Gamma (Arrow sigma tau) -> exp Gamma sigma -> exp Gamma tau
-    | Fix : forall (Gamma : ctx) (sigma : ty) . exp Gamma (Arrow sigma sigma) -> exp Gamma sigma
-    | Succ : forall (Gamma : ctx) . exp Gamma Nat -> exp Gamma Nat
-    | Pred : forall (Gamma : ctx) . exp Gamma Nat -> exp Gamma Nat
-    | Ifz : forall (Gamma : ctx) (sigma : ty) . exp Gamma Nat -> exp Gamma sigma -> exp Gamma sigma
+    term : ctx -> ty -> type =
+    | Var : forall (Gamma : ctx) (tau : ty) . bound tau Gamma -> term Gamma tau
+    (* | Zero : forall (Gamma : ctx) . term Gamma Nat *)
+    | Num : forall (Gamma : ctx) . nat -> term Gamma Nat
+    | Lam : forall (Gamma : ctx) (sigma tau : ty) . term (Extend Gamma sigma) tau -> term Gamma (Arrow sigma tau)
+    | App : forall (Gamma : ctx) (sigma tau : ty) . term Gamma (Arrow sigma tau) -> term Gamma sigma -> term Gamma tau
+    | Fix : forall (Gamma : ctx) (sigma : ty) . term Gamma (Arrow sigma sigma) -> term Gamma sigma
+    | Succ : forall (Gamma : ctx) . term Gamma Nat -> term Gamma Nat
+    | Pred : forall (Gamma : ctx) . term Gamma Nat -> term Gamma Nat
+    | Ifz : forall (Gamma : ctx) (sigma : ty) . term Gamma Nat -> term Gamma sigma -> term Gamma sigma
 /;
 
 define /Subst Gamma Delta/ 
 /
-  forall (sigma : ty) . bound sigma Gamma -> exp Delta sigma
+  forall (sigma : ty) . bound sigma Gamma -> term Delta sigma
 //
   ctx -> ctx -> U 0
 /;
@@ -231,7 +363,7 @@ reduce //.
 
 
 Subst : Ctx → Ctx → Set
-  Subst Γ Δ = ∀ {A} → Γ ∋ A → Exp Δ A
+  Subst Γ Δ = ∀ {A} → Γ ∋ A → term Δ A
   
   Rename : Ctx → Ctx → Set
   Rename Γ Δ = ∀ {A} → Γ ∋ A → Δ ∋ A
@@ -244,7 +376,7 @@ Subst : Ctx → Ctx → Set
   lift Z = S Z
   lift (S x) = S (lift x)
   
-  rename : Rename Γ Δ → Exp Γ B → Exp Δ B
+  rename : Rename Γ Δ → term Γ B → term Δ B
   rename ρ (` x)         = ` (ρ x)
   rename ρ yes           = yes
   rename ρ no            = no
@@ -262,7 +394,7 @@ Subst : Ctx → Ctx → Set
   weaken γ Z     = ` Z
   weaken γ (S x) = rename S (γ x)
   
-  subst : Subst Γ Δ → Exp Γ A → Exp Δ A
+  subst : Subst Γ Δ → term Γ A → term Δ A
   subst γ (` x)         = γ x
   subst γ yes           = yes
   subst γ no            = no
@@ -276,35 +408,35 @@ Subst : Ctx → Ctx → Set
   subst γ (suc M)       = suc (subst γ M)
   subst γ (rec M₀ M₁ M) = rec (subst γ M₀) (subst (weaken γ) M₁) (subst γ M)
   
-  extend : Exp Δ A → Subst Γ Δ → Subst (Γ # A) Δ
+  extend : term Δ A → Subst Γ Δ → Subst (Γ # A) Δ
   extend M γ Z     = M
   extend M γ (S x) = γ x
   
-  _[_] : Exp (Γ # B) A → Exp Γ B → Exp Γ A
+  _[_] : term (Γ # B) A → term Γ B → term Γ A
   N [ M ] = subst (extend M `_) N
   
-  data _↦_ : Exp · A → Exp · A → Set where
-    step-fst   : {M M' : Exp · (prod A₁ A₂)} → (M ↦ M') → (fst M ↦ fst M')
-    step-fst-β : {M₁ : Exp · A₁} {M₂ : Exp · A₂} → (fst (pair M₁ M₂) ↦ M₁)
-    step-snd   : {M M' : Exp · (prod A₁ A₂)} → (M ↦ M') → (snd M ↦ snd M')
-    step-snd-β : {M₁ : Exp · A₁} {M₂ : Exp · A₂} → (snd (pair M₁ M₂) ↦ M₂)
-    step-app   : {M₁ M₁' : Exp · (arr A₁ A₂)} {M₂ : Exp · A₁} → (M₁ ↦ M₁') → (app M₁ M₂) ↦ (app M₁' M₂)
-    step-app-β : {M₂ : Exp (· # A₁) A₂} {M₁ : Exp · A₁} → (app (lam M₂) M₁) ↦ (M₂ [ M₁ ])
-    step-rec   : ∀ {M₀ : Exp · A} {M₁ M M'} → (M ↦ M') → (rec M₀ M₁ M ↦ rec M₀ M₁ M')
-    step-rec-β₀ : ∀ {M₀ : Exp · A} {M₁} → (rec M₀ M₁ zero ↦ M₀)
-    step-rec-β₁ : ∀ {M₀ : Exp · A} {M₁ M} → (rec M₀ M₁ (suc M) ↦ (M₁ [ rec M₀ M₁ M ]))
+  data _↦_ : term · A → term · A → Set where
+    step-fst   : {M M' : term · (prod A₁ A₂)} → (M ↦ M') → (fst M ↦ fst M')
+    step-fst-β : {M₁ : term · A₁} {M₂ : term · A₂} → (fst (pair M₁ M₂) ↦ M₁)
+    step-snd   : {M M' : term · (prod A₁ A₂)} → (M ↦ M') → (snd M ↦ snd M')
+    step-snd-β : {M₁ : term · A₁} {M₂ : term · A₂} → (snd (pair M₁ M₂) ↦ M₂)
+    step-app   : {M₁ M₁' : term · (arr A₁ A₂)} {M₂ : term · A₁} → (M₁ ↦ M₁') → (app M₁ M₂) ↦ (app M₁' M₂)
+    step-app-β : {M₂ : term (· # A₁) A₂} {M₁ : term · A₁} → (app (lam M₂) M₁) ↦ (M₂ [ M₁ ])
+    step-rec   : ∀ {M₀ : term · A} {M₁ M M'} → (M ↦ M') → (rec M₀ M₁ M ↦ rec M₀ M₁ M')
+    step-rec-β₀ : ∀ {M₀ : term · A} {M₁} → (rec M₀ M₁ zero ↦ M₀)
+    step-rec-β₁ : ∀ {M₀ : term · A} {M₁ M} → (rec M₀ M₁ (suc M) ↦ (M₁ [ rec M₀ M₁ M ]))
   
-  data _↦*_ : Exp · A → Exp · A → Set where
-    ↦*-refl : {M : Exp · A} → M ↦* M
-    ↦*-step : {M M' M'' : Exp · A} → M ↦ M' → M' ↦* M'' → M ↦* M''
+  data _↦*_ : term · A → term · A → Set where
+    ↦*-refl : {M : term · A} → M ↦* M
+    ↦*-step : {M M' M'' : term · A} → M ↦ M' → M' ↦* M'' → M ↦* M''
   
-  ↦*-trans : {M M' M'' : Exp · A} → M ↦* M' → M' ↦* M'' → M ↦* M''
+  ↦*-trans : {M M' M'' : term · A} → M ↦* M' → M' ↦* M'' → M ↦* M''
   ↦*-trans ↦*-refl step = step
   ↦*-trans (↦*-step step₁ step₂) step = ↦*-step step₁ (↦*-trans step₂ step)
   
-  compatible : {p : Exp · A → Exp · B}
-    → ({M M' : Exp · A} → M ↦ M' → p M ↦ p M')
-    → {M M' : Exp · A} → M ↦* M' → p M ↦* p M'
+  compatible : {p : term · A → term · B}
+    → ({M M' : term · A} → M ↦ M' → p M ↦ p M')
+    → {M M' : term · A} → M ↦* M' → p M ↦* p M'
   compatible lift ↦*-refl       = ↦*-refl
   compatible lift (↦*-step x s) = ↦*-step (lift x) (compatible lift s)
  
