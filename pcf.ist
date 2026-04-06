@@ -76,6 +76,60 @@ typedef
     | Ifz : term -> term -> term -> term
 /;
 
+defineInd //
+/
+  interp_type : ty -> U 0 of
+  | Nat . ev nat
+  | Arrow sigma tau . interp_type sigma -> interp_type tau
+//
+  intersect (i : level) . ty -> U i
+/;
+
+defineInd //
+/
+  theta_type : forall (sigma : ty) . future (interp_type sigma) -> interp_type sigma of
+  | Nat . laterf
+  | Arrow sigma tau . fn f x . theta_type tau (let next g = f in next (g x))
+//
+  intersect (i : level) . forall (sigma : ty) . future (interp_type sigma) -> interp_type sigma
+/;
+
+typedef
+/
+  datatype
+    intersect (i : level) .
+    forall (sigma : ty) .
+    U i
+  of
+    bound_at : list ty -> nat -> type =
+    | Z : forall (Gamma : list ty) . bound_at (sigma :: Gamma) zero
+    | S : forall (Gamma : list ty) (tau : ty) (n : nat) . 
+        bound_at Gamma n -> bound_at (tau :: Gamma) (succ n)
+/;
+
+openModule /List/;
+
+defineInd //
+/
+  interp_ctx : list [ty] -> U 0 of
+  | nil . unit
+  | cons sigma Gamma . interp_type sigma & interp_ctx Gamma
+//
+  intersect (i : level) . list ty -> U i
+/;
+
+(* Project a substitution *)
+defineInd /sigma/
+/
+  project : bound_at [sigma] Gamma n -> interp_ctx Gamma -> interp_type sigma of
+  | Z _ . fn gamma . gamma #1
+  | S _ _ _ bound . fn gamma . project bound (gamma #2)
+//
+  intersect (i : level) .
+    forall (sigma : ty) (Gamma : list ty) (n : nat) .
+      bound_at sigma Gamma n -> interp_ctx Gamma -> interp_type sigma
+/;
+
 typedef
 /
   datatype
@@ -83,7 +137,7 @@ typedef
     U i
   of
     has_type : list ty -> term -> ty -> type =
-    | VarTyped : forall (Gamma : list ty) (idx : nat) (sigma : ty) . (nth Gamma idx = Some sigma : option ty) -> has_type Gamma (Var idx) sigma
+    | VarTyped : forall (Gamma : list ty) (idx : nat) (sigma : ty) . bound_at sigma Gamma idx -> has_type Gamma (Var idx) sigma
     | NumTyped : forall (Gamma : list ty) (n : nat) . has_type Gamma (Num n) Nat
     | LamTyped : forall (Gamma : list ty) (sigma tau : ty) (M : term) . 
         has_type (sigma :: Gamma) M tau -> has_type Gamma (Lam M) (Arrow sigma tau)
@@ -105,6 +159,30 @@ typedef
         has_type Gamma N sigma ->
         has_type Gamma P sigma ->
           has_type Gamma (Ifz M N P) sigma
+/;
+
+openModule /Nat/;
+
+defineInd //
+/
+  interp : has_type Gamma e sigma -> interp_ctx Gamma -> interp_type sigma of
+  | VarTyped Gamma idx sigma bound . project sigma Gamma idx bound
+  | NumTyped Gamma n . fn gamma . now n
+  | LamTyped Gamma sigma tau M deriv . fn gamma x . interp deriv (x, gamma)
+  | AppTyped Gamma sigma tau M N derivM derivN . fn gamma . (interp derivM gamma) (interp derivN gamma)
+  | FixTyped Gamma sigma M deriv . fn gamma . ffix (fn x . interp deriv gamma (theta_type sigma x))
+  | SuccTyped Gamma M deriv . fn gamma . mapev succ (interp deriv gamma)
+  | PredTyped Gamma M deriv . fn gamma . mapev pred (interp deriv gamma)
+  | IfzTyped Gamma M N P sigma derivM derivN derivP .
+    fn gamma .
+      ev_iter
+        (fn n . nat_case n (interp derivN gamma) (fn _ . interp derivP gamma))
+        (fn _ r . theta_type sigma r)
+        (interp derivM gamma)
+//
+  intersect (i : level) .
+    forall (Gamma : list ty) (M : term) (sigma : ty) .
+      has_type Gamma M sigma -> interp_ctx Gamma -> interp_type sigma
 /;
 
 defineInd /S enter resolve/
@@ -303,11 +381,10 @@ defineInd //
 /
   theta_type : forall (sigma : ty) . future (interp_type sigma) -> interp_type sigma of
   | Nat . laterf
-  | Arrow sigma tau . fn f x . theta_type tau (later_app f (next x))
+  | Arrow sigma tau . fn f x . theta_type tau (let next g = f in next (g x))
 //
   intersect (i : level) . forall (sigma : ty) . future (interp_type sigma) -> interp_type sigma
 /;
-
 
 
 typedef
@@ -380,15 +457,17 @@ unfold /Rename/.
 typecheck.
 qed ();
 
-defineInd /extend_var {Gamma Delta sigma} rho tau Hbound/
+defineInd /{Gamma Delta sigma} rho tau Hbound/
 (* define /extend_var (rho : Rename Gamma Delta) (tau : ty) (Hbound : bound tau (Extend Gamma sigma)) : bound tau (Extend Delta sigma) / *)
 /
-  case Hbound : bound of
+  extend_var : bound tau (Extend Gamma sigma) -> bound tau (Extend Delta sigma)  of
   | Z Gamma' . Z tau Delta
   | S sigma' Gamma' x . S tau sigma Delta (rho tau x)
 //
   forall (Gamma Delta : ctx) (sigma : ty) . Rename Gamma Delta -> Rename (Extend Gamma sigma) (Extend Delta sigma)
 /;
+
+
 
 unfold /extend_var/.
 unfold /Rename at all/.
