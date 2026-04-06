@@ -102,8 +102,8 @@ typedef
     U i
   of
     bound_at : list ty -> nat -> type =
-    | Z : forall (Gamma : list ty) . bound_at (sigma :: Gamma) zero
-    | S : forall (Gamma : list ty) (tau : ty) (n : nat) . 
+    | Here : forall (Gamma : list ty) . bound_at (sigma :: Gamma) zero
+    | There : forall (Gamma : list ty) (tau : ty) (n : nat) . 
         bound_at Gamma n -> bound_at (tau :: Gamma) (succ n)
 /;
 
@@ -122,8 +122,8 @@ defineInd //
 defineInd /sigma/
 /
   project : bound_at [sigma] Gamma n -> interp_ctx Gamma -> interp_type sigma of
-  | Z _ . fn gamma . gamma #1
-  | S _ _ _ bound . fn gamma . project bound (gamma #2)
+  | Here _ . fn gamma . gamma #1
+  | There _ _ _ bound . fn gamma . project bound (gamma #2)
 //
   intersect (i : level) .
     forall (sigma : ty) (Gamma : list ty) (n : nat) .
@@ -367,25 +367,6 @@ typedef
 /;
 
 openModule /Eventually/;
-
-defineInd //
-/
-  interp_type : ty -> U 0 of
-  | Nat . ev nat
-  | Arrow sigma tau . interp_type sigma -> interp_type tau
-//
-  intersect (i : level) . ty -> U i
-/;
-
-defineInd //
-/
-  theta_type : forall (sigma : ty) . future (interp_type sigma) -> interp_type sigma of
-  | Nat . laterf
-  | Arrow sigma tau . fn f x . theta_type tau (let next g = f in next (g x))
-//
-  intersect (i : level) . forall (sigma : ty) . future (interp_type sigma) -> interp_type sigma
-/;
-
 
 typedef
 /
