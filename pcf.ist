@@ -33,6 +33,7 @@ inference.
 introOf /i a b ff fx/.
 unfold /later_app/.
 typecheck.
+
 qed ();
 
 lemma "later_app_hom"
@@ -118,7 +119,6 @@ defineInd //
   intersect (i : level) . list ty -> U i
 /;
 
-(* Project a substitution *)
 defineInd /sigma/
 /
   project : bound_at [sigma] Gamma n -> interp_ctx Gamma -> interp_type sigma of
@@ -170,7 +170,7 @@ defineInd //
   | NumTyped Gamma n . fn gamma . now n
   | LamTyped Gamma sigma tau M deriv . fn gamma x . interp deriv (x, gamma)
   | AppTyped Gamma sigma tau M N derivM derivN . fn gamma . (interp derivM gamma) (interp derivN gamma)
-  | FixTyped Gamma sigma M deriv . fn gamma . ffix (fn x . interp deriv gamma (theta_type sigma x))
+  | FixTyped Gamma sigma M deriv . fn gamma . ffix (fn fx . theta_type sigma (let next x = fx in next (interp deriv gamma x)))
   | SuccTyped Gamma M deriv . fn gamma . mapev succ (interp deriv gamma)
   | PredTyped Gamma M deriv . fn gamma . mapev pred (interp deriv gamma)
   | IfzTyped Gamma M N P sigma derivM derivN derivP .
@@ -184,6 +184,8 @@ defineInd //
     forall (Gamma : list ty) (M : term) (sigma : ty) .
       has_type Gamma M sigma -> interp_ctx Gamma -> interp_type sigma
 /;
+
+Database.setImplicits (parseConstant /interp/) 3;
 
 defineInd /S enter resolve/
 /
@@ -200,6 +202,43 @@ defineInd /S enter resolve/
   intersect (i : level) . forall (S : U i) . (S -> S) -> (S -> nat -> term) -> term -> S -> term
 /;
 
+
+define /delta sigma x/
+/
+  theta_type sigma (next x)
+//
+  intersect (i : level) .
+    forall (sigma : ty) .
+      interp_type sigma -> interp_type sigma
+/;
+
+introOf /i sigma/.
+unfold /delta/.
+typecheck.
+qed ();
+
+reductions
+/
+  delta sigma x --> theta_type sigma (next x) ;
+
+  unfolding delta
+/;
+
+(* delta sigma (interp (AppTyped Gamma M (Fix M) deriv (FixTyped Gamma sigma M deriv)) gamma) *)
+
+(* Lemma 4.1 *)
+lemma "interp_fix_step"
+/
+  forall (Gamma : list ty) (M : term) (sigma : ty) (deriv : has_type Gamma M (Arrow sigma sigma)) (gamma : interp_ctx Gamma) .
+    (interp (FixTyped Gamma sigma M deriv) gamma = delta sigma (interp (AppTyped Gamma sigma sigma M (Fix M) deriv (FixTyped Gamma sigma M deriv)) gamma) : interp_type sigma)
+/;
+
+intro /Gamma M sigma deriv gamma/.
+inference.
+reduce //.
+unroll /ffix/.
+reflexivity.
+qed ();
 
 lemma "traverse_var"
 /
@@ -365,6 +404,9 @@ typedef
   | step_ifz_beta_succ : forall (M N : term) (n : nat) . step (Ifz (Num (succ n)) M N) false N
   | step_ifz_guard : forall (M M' N P : term) (k : bool) . step M k M' -> step (Ifz M N P) k (Ifz M' N P)
 /;
+
+
+lemma "fix_interp_unfold" : 
 
 openModule /Eventually/;
 
