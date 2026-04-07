@@ -617,6 +617,54 @@ apply /renaming_preserves_type/.
 }
 qed ();
 
+lemma "weaken_subst"
+/
+  forall sub Gamma Delta sigma .
+    subst_typed sub Gamma Delta ->
+      subst_typed (Subst.dot (Var 0) (Subst.shift_sub pcfSubstT sub)) (sigma :: Gamma) (sigma :: Delta)
+/;
+
+inference.
+unfold /subst_typed at all/.
+intro /sub Gamma Delta sigma Hty tau n Hbound/.
+destruct /n/ / | n/.
+{
+  inversion /Hbound/.
+  subst /tau/.
+  reduce //.
+  apply /VarTyped/.
+  apply /Here/.
+}
+{
+  reduce //.
+  rewrite /-> project_shift_sub_comm/.
+  inversion /Hbound/.
+  apply /renaming_preserves_type/.
+  {
+    apply /Hty/.
+    auto.
+  }
+  {
+    unfold /renaming/.
+    intro /sigma' m Hbound'/.
+    exists /succ m/.
+    split.
+    {
+      rewrite /-> Subst.project_sh pcfSubstT/.
+      reduce //.
+      reflexivity.
+    }
+    {
+      apply /There/.
+      assumption.
+    }
+  }
+  {
+    typecheck.
+  }
+}
+qed ();
+
 
 
 lemma "subst_typed_under"
