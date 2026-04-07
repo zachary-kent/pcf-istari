@@ -584,8 +584,6 @@ induction /Hty/.
 qed ();
 
 
-
-
 lemma "weakening"
 /
   forall (Delta : list ty) (M : term) (tau sigma : ty) .
@@ -593,39 +591,33 @@ lemma "weakening"
       has_type (sigma :: Delta) (Subst.subst pcfSubstT (Subst.sh 1) M) tau
 /;
 
-intro /Delta M tau sigma Hty/.
-induction /Hty/.
+intro /Delta M tau sigma/.
+intro /Hty/.
+apply /renaming_preserves_type/.
 {
-  intro /Gamma idx tau Hbound/.
-  reduce //.
-  unfold /Subst.subst/.
-  unfold /pcfSubstT/.
-  unfold /Subst.traverse/.
-  reduce //.
-  rewrite /-> Subst.project_sh pcfSubstT/.
-  reduce //.
-  apply /VarTyped/.
-  apply /There/.
   auto.
 }
 {
-  intro /Gamma n/.
-  apply /NumTyped/.
+  unfold /renaming/.
+  intro /sigma' n Hbound/.
+  exists /succ n/.
+  rewrite /-> Subst.project_sh pcfSubstT/.
+  reduce //.
+  split.
+  {
+    reflexivity.
+  }
+  {
+    apply /There/.
+    auto.
+  }
 }
 {
-  intro /Gamma sigma' tau M Hty IH/.
-
-  apply /LamTyped/.
-
+  typecheck.
 }
+qed ();
 
-  unfold /Subst.subst, pcfSubstT, Subst.traverse/;
 
-
-  apply /VarTyped/.
-  apply /There/.
-
-}
 
 lemma "subst_typed_under"
 /
