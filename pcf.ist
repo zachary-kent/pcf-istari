@@ -689,6 +689,56 @@ induction /Hbound/.
 }
 qed ();
 
+lemma "bound_at_irr"
+/
+  forall sigma Gamma n (Hbound Hbound' : bound_at sigma Gamma n) gamma .
+    project sigma Gamma n Hbound gamma = project sigma Gamma n Hbound' gamma : interp_type sigma
+/;
+
+inference.
+intro /sigma Gamma n Hbound/.
+(* revert /sigma Gamma/. *)
+induction /Hbound/.
+{
+  intro /Gamma Hbound' gamma/.
+  destruct /gamma/ /V gamma/.
+  reduce //.
+  destruct /Hbound'/ /{ Gamma' | Gamma' sigma'}/.
+  {
+    injection /v0/.
+    subst /Gamma'/.
+    reduce //.
+    reflexivity.
+  }
+  {
+    injection /v3/.
+  }
+}
+{
+  intro /Gamma tau n Hbound IH Hbound' gamma/.
+  destruct /gamma/ /V gamma/.
+  reduce //.
+  destruct /Hbound'/ /{ Gamma' | Gamma' sigma'}/.
+  {
+    injection /v0/.
+    injection /v1/.
+  }
+  {
+    injection /v3/.
+    subst /v0/.
+    injection /v2/.
+    subst /sigma'/.
+    reduce //.
+    subst /Gamma'/.
+    {
+      auto.
+    }
+    {
+      apply /IH/.
+    }
+  }
+}  
+qed ();
 
 
 lemma "subst_typed_under"
