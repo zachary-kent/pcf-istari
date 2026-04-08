@@ -69,7 +69,7 @@ typedef
     | Var : nat -> term
     (* | Zero : forall (Gamma : ctx) . term Gamma Nat *)
     | Num : nat -> term
-    | Lam : term -> term
+    | Lam : ty -> term -> term
     | App : term -> term -> term
     | Fix : term -> term
     | Succ : term -> term
@@ -140,7 +140,7 @@ typedef
     | VarTyped : forall (Gamma : list ty) (idx : nat) (sigma : ty) . bound_at sigma Gamma idx -> has_type Gamma (Var idx) sigma
     | NumTyped : forall (Gamma : list ty) (n : nat) . has_type Gamma (Num n) Nat
     | LamTyped : forall (Gamma : list ty) (sigma tau : ty) (M : term) . 
-        has_type (sigma :: Gamma) M tau -> has_type Gamma (Lam M) (Arrow sigma tau)
+        has_type (sigma :: Gamma) M tau -> has_type Gamma (Lam sigma M) (Arrow sigma tau)
     | AppTyped : forall (Gamma : list ty) (sigma tau : ty) (M N : term) .
         has_type Gamma M (Arrow sigma tau) ->
         has_type Gamma N sigma ->
@@ -192,7 +192,7 @@ defineInd /S enter resolve/
   traverse : term -> S -> term of
   | Var i . fn s . resolve s i
   | Num n . fn s . Num n
-  | Lam M . fn s . Lam (traverse M (enter s))
+  | Lam sigma M . fn s . Lam sigma (traverse M (enter s))
   | App M N . fn s . App (traverse M s) (traverse N s)
   | Fix M . fn s . Fix (traverse M s)
   | Succ M . fn s . Succ (traverse M s)
@@ -333,6 +333,10 @@ intro /i S S' enter enter' resolve resolve' M s s'/.
 revert /s s'/.
 induction /M/ >> auto.
 {
+  intro /sigma M IH s s'/.
+  auto.
+}
+{
   intro /M IHM N IHN s s'/.
   auto.
 }
@@ -412,8 +416,8 @@ typedef
 / datatype U 0 of
   step : term -> bool -> term -> type =
   | step_app : forall (M M' N : term) (k : bool) . step M k M' -> step (App M N) k (App M' N)
-  | step_app_beta : forall (M N : term) . step (App (Lam M) N) false (Subst.subst pcfSubstT (Subst.dot N (Subst.sh 0)) M)
-  | step_fix_beta : forall (M : term) . step (Fix M) true (Subst.subst pcfSubstT (Subst.dot M (Subst.sh 0)) M)
+  | step_app_beta : forall (sigma : ty) (M N : term) . step (App (Lam sigma M) N) false (Subst.subst pcfSubstT (Subst.dot N (Subst.sh 0)) M)
+  | step_fix : forall (M : term) . step (Fix M) true (App M (Fix M))
   | step_succ_beta : forall (n : nat) . step (Succ (Num n)) false (Num (succ n))
   | step_succ : forall (M N : term) (k : bool) . step M k N -> step (Succ M) k (Succ N)
   | step_pred_beta : forall (n : nat) . step (Pred (Num n)) false (Num (Nat.pred n))
@@ -441,7 +445,7 @@ setOpacity /subst_typed/ Constant.SOFT;
 reductions
 /
   Subst.subst (pcfSubstT) sub (Num n) --> Num n ;
-  Subst.subst (pcfSubstT) sub (Lam M) --> Lam (Subst.subst pcfSubstT (Subst.under pcfSubstT 1 sub) M) ;
+  Subst.subst (pcfSubstT) sub (Lam sigma M) --> Lam sigma (Subst.subst pcfSubstT (Subst.under pcfSubstT 1 sub) M) ;
   Subst.subst (pcfSubstT) sub (App M N) --> App (Subst.subst pcfSubstT sub M) (Subst.subst pcfSubstT sub N) ;
   Subst.subst (pcfSubstT) sub (Fix M) --> Fix (Subst.subst pcfSubstT sub M) ;
   Subst.subst (pcfSubstT) sub (Succ M) --> Succ (Subst.subst pcfSubstT sub M) ;
@@ -582,7 +586,6 @@ induction /Hty/.
   apply /IfzTyped/ >> auto.
 }
 qed ();
-
 
 lemma "weakening"
 /
@@ -738,6 +741,71 @@ induction /Hbound/.
     }
   }
 }  
+qed ();
+
+lemma "typing_det"
+/
+  forall Gamma M sigma tau .
+    has_type Gamma M sigma ->
+      has_type Gamma M tau ->
+        sigma = tau : ty
+/;
+
+inference.
+intro /Gamma M sigma tau Hty/.
+revert /tau/.
+induction /Hty/.
+{
+  intro /Gamma idx sigma Hbound tau Hty/.
+  inversion /Hty/.
+  apply /bound_at_det/ >> auto.
+}
+{
+  intro /Gamma n tau Hty/.
+  inversion /Hty/.
+  assumption.
+}
+{
+  intro /Gamma sigma tau' M HtyM IH tau Hty/.
+  (* destructThinCautious /Hty/ /{}/.  *)
+  inversion /Hty/.
+  substAll.
+  compat.
+  apply /IH/.
+  assumption.
+}
+{
+  intro /Gamma sigma tau M N HtyM IHM HtyN IHN tau' Hty/.
+  inversion /Hty/.
+  reintro /sigma' HtyM' HtyN'/.
+  so /IHM _ HtyM'/ /Heqarr/.
+  injection /Heqarr/.
+  substAll.
+  reflexivity.
+}
+{
+  intro /Gamma sigma M HtyM IH tau Hty/.
+  inversion /Hty/.
+  reintro /HtyM'/.
+  so /IH _ HtyM'/ /Heq/.
+  injection /Heq/.
+  auto.
+}
+{
+  intro /Gamma M HtyM IH tau Hty/.
+  inversion /Hty/.
+  auto.
+}
+{
+  intro /Gamma M HtyM IH tau Hty/.
+  inversion /Hty/.
+  auto.
+}
+{
+  intro /Gamma sigma M N P HtyM IHM HtyN IHN HtyP IHP tau' Hty/.
+  inversion /Hty/.
+  auto.
+}
 qed ();
 
 lemma "deriv_irr"
