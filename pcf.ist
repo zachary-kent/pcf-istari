@@ -922,6 +922,27 @@ induction /deriv/.
 }
 qed ();
 
+define /semantic_renaming {Gamma Delta} sub gamma delta/
+/
+  forall n m sigma Hbound Hbound' .
+    Subst.project pcfSubstT sub n = Var m : term ->
+      project sigma Gamma n Hbound gamma = 
+        project sigma Delta m Hbound' delta : interp_type sigma
+//
+  intersect (i : level) .
+    forall (Gamma Delta : list ty) .
+      Subst.sub pcfSubstT ->
+        interp_ctx Gamma ->
+          interp_ctx Delta ->
+            U i
+/;
+
+unfold /semantic_renaming/.
+inference.
+typecheck.
+qed ();
+
+
 
 lemma "subst_typed_under"
 /
