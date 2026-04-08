@@ -665,6 +665,30 @@ destruct /n/ / | n/.
 }
 qed ();
 
+lemma "bound_at_det"
+/
+  forall sigma tau Gamma n .
+    bound_at sigma Gamma n ->
+    bound_at tau Gamma n ->
+    sigma = tau : ty
+/;
+
+inference.
+intro /sigma tau Gamma n Hbound/.
+induction /Hbound/.
+{
+  intro /Gamma Hbound/.
+  inversion /Hbound/.
+  auto.
+}
+{
+  intro /Gamma sigma' n Hbound IH Hbound'/.
+  inversion /Hbound'/.
+  apply /IH/.
+  assumption.
+}
+qed ();
+
 
 
 lemma "subst_typed_under"
