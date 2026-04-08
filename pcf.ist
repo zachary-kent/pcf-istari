@@ -842,21 +842,85 @@ induction /deriv/.
   reduce //.
   destructThinCautious /deriv'/ /{}/.
   reduce //.
-  substAll >> auto.
+  substAll.
+  {
+    reflexivity.
+  }
+  {
+    auto.
+  }
+  {
+    reflexivity.
+  }
+  {
+    auto.
+  }
+  {
+    auto.
+  }
+  {
+    subst /v0/.
+    {
+      auto.
+    }
+    {
+      so /IH v4 (V, gamma)/ /H/.
+      auto.
+    }
+  }
 }
 {
   intro /Gamma sigma tau M N HtyM IHM HtyN IHN deriv' gamma/.
-  reduce //.
   destructThinCautious /deriv'/ /{}/.
   reduce //.
   substAll >> auto.
-  rewrite /-> IHM/.
-  {
-    auto.
-
-  }
+  reintro /sigma' HtyM' HtyN' gamma/.
+  so /typing_det _ _ _ _ HtyM HtyM'/ /HM/.
+  injection /HM/.
+  so /typing_det _ _ _ _ HtyN HtyN'/ /HN/.
+  substAll.
+  rewrite /-> IHM HtyM' gamma/.
+  rewrite /-> IHN HtyN' gamma/.
+  reflexivity.
 }
-
+{
+  intro /Gamma sigma M Hty IH deriv'/.
+  destructThin /deriv'/ /{}/ >> auto.
+  reintro /Hty'/.
+  intro /gamma/.
+  reduce //.
+  compat.
+  extensionality.
+  reduce //.
+  rewrite /-> IH Hty' gamma/.
+  reflexivity.
+}
+{
+  intro /Gamma M HtyM IH Hty/.
+  destructThinCautious /Hty/ /{}/.
+  substAll >> auto.
+  reduce //.
+  auto.
+}
+{
+  intro /Gamma M HtyM IH Hty/.
+  destructThinCautious /Hty/ /{}/.
+  substAll >> auto.
+  reduce //.
+  auto.
+}
+{
+  intro /Gamma M N P sigma HtyM IHM HtyN IHN HtyP IHP Hty/.
+  destructThinCautious /Hty/ /{}/.
+  substAll >> auto.
+  reintro /HtyM' HtyN' HtyP'/.
+  intro /gamma/.
+  reduce //.
+  compat >> auto.
+  { auto. }
+  { auto. }
+}
+qed ();
 
 
 lemma "subst_typed_under"
