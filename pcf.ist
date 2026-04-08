@@ -740,6 +740,56 @@ induction /Hbound/.
 }  
 qed ();
 
+lemma "deriv_irr"
+/
+  forall Gamma M sigma (deriv deriv' : has_type Gamma M sigma) gamma .
+    interp deriv gamma = interp deriv' gamma : interp_type sigma
+/;
+
+inference.
+intro /Gamma M sigma deriv/.
+induction /deriv/.
+{
+  intro /Gamma idx sigma Hbound deriv' gamma/.
+  destructThin /deriv'/ /{}/.
+  {
+    auto.
+  }
+  {
+    reduce //.
+    apply /bound_at_irr/.
+  }
+}
+{
+  intro /Gamma n deriv' gamma/.
+  destructThinCautious /deriv'/ /{}/.
+  reduce //.
+  compat.
+  auto.
+}
+{
+  intro /Gamma sigma tau M Hty IH deriv' gamma/.
+  extensionality.
+  reintro /V/.
+  reduce //.
+  destructThinCautious /deriv'/ /{}/.
+  reduce //.
+  substAll >> auto.
+}
+{
+  intro /Gamma sigma tau M N HtyM IHM HtyN IHN deriv' gamma/.
+  reduce //.
+  destructThinCautious /deriv'/ /{}/.
+  reduce //.
+  substAll >> auto.
+  rewrite /-> IHM/.
+  {
+    auto.
+
+  }
+}
+
+
 
 lemma "subst_typed_under"
 /
