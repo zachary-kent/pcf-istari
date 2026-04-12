@@ -203,7 +203,7 @@ defineInd /S enter resolve/
 /;
 
 
-define /delta sigma x/
+define /delta_type sigma x/
 /
   theta_type sigma (next x)
 //
@@ -213,24 +213,24 @@ define /delta sigma x/
 /;
 
 introOf /i sigma/.
-unfold /delta/.
+unfold /delta_type/.
 typecheck.
 qed ();
 
 reductions
 /
-  delta sigma x --> theta_type sigma (next x) ;
+  delta_type sigma x --> theta_type sigma (next x) ;
 
-  unfolding delta
+  unfolding delta_type
 /;
 
-(* delta sigma (interp (AppTyped Gamma M (Fix M) deriv (FixTyped Gamma sigma M deriv)) gamma) *)
+(* delta_type sigma (interp (AppTyped Gamma M (Fix M) deriv (FixTyped Gamma sigma M deriv)) gamma) *)
 
 (* Lemma 4.1 *)
 lemma "interp_fix_step"
 /
   forall (Gamma : list ty) (M : term) (sigma : ty) (deriv : has_type Gamma M (Arrow sigma sigma)) (gamma : interp_ctx Gamma) .
-    (interp (FixTyped Gamma sigma M deriv) gamma = delta sigma (interp (AppTyped Gamma sigma sigma M (Fix M) deriv (FixTyped Gamma sigma M deriv)) gamma) : interp_type sigma)
+    (interp (FixTyped Gamma sigma M deriv) gamma = delta_type sigma (interp (AppTyped Gamma sigma sigma M (Fix M) deriv (FixTyped Gamma sigma M deriv)) gamma) : interp_type sigma)
 /;
 
 intro /Gamma M sigma deriv gamma/.
@@ -247,7 +247,7 @@ lemma "if_reduce"
          (derivL : has_type Gamma L Nat) (derivL' : has_type Gamma L' Nat) (derivM : has_type Gamma M sigma) (derivN : has_type Gamma N sigma) .
             interp derivL gamma = later (interp derivL' gamma) : interp_type Nat ->
               interp (IfzTyped Gamma L M N sigma derivL derivM derivN) gamma = 
-              delta sigma (interp (IfzTyped Gamma L' M N sigma derivL' derivM derivN) gamma) : interp_type sigma
+              delta_type sigma (interp (IfzTyped Gamma L' M N sigma derivL' derivM derivN) gamma) : interp_type sigma
 
 /;
 
@@ -451,7 +451,8 @@ reductions
   Subst.subst (pcfSubstT) sub (Succ M) --> Succ (Subst.subst pcfSubstT sub M) ;
   Subst.subst (pcfSubstT) sub (Pred M) --> Pred (Subst.subst pcfSubstT sub M) ;
   Subst.subst (pcfSubstT) sub (Ifz M N P) --> Ifz (Subst.subst pcfSubstT sub M) (Subst.subst pcfSubstT sub N) (Subst.subst pcfSubstT sub P);
-
+  Subst.subst (pcfSubstT) sub (Var idx) --> Subst.project pcfSubstT sub idx ;
+  (* Subst.project pcfSubstT sub idx = Subst.subst pcfSubstT sub (Var idx) : term *)
 
   unfolding Subst.subst pcfSubstT Subst.traverse
   unrolling Subst.under
@@ -486,6 +487,44 @@ unfold /renaming/.
 typecheck.
 qed ();
 
+lemma "weaken_renaming"
+/
+forall (sub : Subst.sub pcfSubstT) (Gamma Delta : list ty) (sigma : ty) .
+  renaming sub Gamma Delta ->
+    renaming
+      (Subst.dot (Var 0) (Subst.shift_sub pcfSubstT sub))
+      (sigma :: Gamma)
+      (sigma :: Delta)
+/;
+
+unfold /renaming/.
+intro /sub Gamma Delta sigma Hrename sigma' n Hbound/.
+destruct /n/ / | k/.
+{
+  inversion /Hbound/.
+  subst /sigma'/.
+  reduce //.
+  exists /zero/.
+  split >> auto.
+  apply /Here/.
+}
+{
+  inversion /Hbound/.
+  reduce //.
+  so /Hrename _ _ v0/ /m Hmap Hboundmap/.
+  rewrite /-> project_shift_sub_comm/.
+  exists /succ m/.
+  rewrite /-> Hmap/.
+  reduce //.
+  (* rewrite /Var m = Subst.var pcfSubstT m : term/. *)
+  (* rewrite /-> Subst.subst_var/. *)
+  rewrite /-> Subst.project_sh/.
+  reduce //.
+  split >> auto.
+  apply /There/.
+  auto.
+}
+qed ();
 
 (* If Gamma |- sub : Delta and Gamma |- M : sigma, then Delta |- \hat{sub}(M) : tau *)
 lemma "renaming_preserves_type"
@@ -503,10 +542,6 @@ induction /Hty/.
 {
   (* Var case *)
   intro /Gamma idx sigma Hbound sub Delta Hrename/.
-  unfold /Subst.subst/.
-  unfold /pcfSubstT/.
-  unfold /Subst.traverse/.
-  reduce //.
   unfold /renaming in Hrename/.
   so /Hrename _ _ Hbound/ /m Hmap Bound/.
   rewrite /-> Hmap/.
@@ -523,34 +558,8 @@ induction /Hty/.
   intro /Gamma sigma tau M Hty IH sub Delta Hrename/.
   apply /LamTyped/.
   apply /IH/.
-  unfold /renaming/.
-  intro /sigma' n Hbound/.
-  destruct /n/ / | k/.
-  {
-    inversion /Hbound/.
-    subst /sigma'/.
-    reduce //.
-    exists /zero/.
-    split >> auto.
-    apply /Here/.
-  }
-  {
-    inversion /Hbound/.
-    reduce //.
-    unfold /renaming in Hrename/.
-    so /Hrename _ _ v0/ /m Hmap Hboundmap/.
-    rewrite /-> project_shift_sub_comm/.
-    exists /succ m/.
-    rewrite /-> Hmap/.
-    reduce //.
-    rewrite /Var m = Subst.var pcfSubstT m : term/.
-    rewrite /-> Subst.subst_var/.
-    rewrite /-> Subst.project_sh/.
-    reduce //.
-    split >> auto.
-    apply /There/.
-    auto.
-  }
+  apply /weaken_renaming/.
+  auto.
 }
 {
   intro /Gamma sigma tau M N HtyM IHM HtyN IHN sub Delta Hrename/.
@@ -692,57 +701,6 @@ induction /Hbound/.
 }
 qed ();
 
-lemma "bound_at_irr"
-/
-  forall sigma Gamma n (Hbound Hbound' : bound_at sigma Gamma n) gamma .
-    project sigma Gamma n Hbound gamma = project sigma Gamma n Hbound' gamma : interp_type sigma
-/;
-
-inference.
-intro /sigma Gamma n Hbound/.
-(* revert /sigma Gamma/. *)
-induction /Hbound/.
-{
-  intro /Gamma Hbound' gamma/.
-  destruct /gamma/ /V gamma/.
-  reduce //.
-  destruct /Hbound'/ /{ Gamma' | Gamma' sigma'}/.
-  {
-    injection /v0/.
-    subst /Gamma'/.
-    reduce //.
-    reflexivity.
-  }
-  {
-    injection /v3/.
-  }
-}
-{
-  intro /Gamma tau n Hbound IH Hbound' gamma/.
-  destruct /gamma/ /V gamma/.
-  reduce //.
-  destruct /Hbound'/ /{ Gamma' | Gamma' sigma'}/.
-  {
-    injection /v0/.
-    injection /v1/.
-  }
-  {
-    injection /v3/.
-    subst /v0/.
-    injection /v2/.
-    subst /sigma'/.
-    reduce //.
-    subst /Gamma'/.
-    {
-      auto.
-    }
-    {
-      apply /IH/.
-    }
-  }
-}  
-qed ();
-
 lemma "typing_det"
 /
   forall Gamma M sigma tau .
@@ -806,6 +764,57 @@ induction /Hty/.
   inversion /Hty/.
   auto.
 }
+qed ();
+
+lemma "bound_at_irr"
+/
+  forall sigma Gamma n (Hbound Hbound' : bound_at sigma Gamma n) gamma .
+    project sigma Gamma n Hbound gamma = project sigma Gamma n Hbound' gamma : interp_type sigma
+/;
+
+inference.
+intro /sigma Gamma n Hbound/.
+(* revert /sigma Gamma/. *)
+induction /Hbound/.
+{
+  intro /Gamma Hbound' gamma/.
+  destruct /gamma/ /V gamma/.
+  reduce //.
+  destruct /Hbound'/ /{ Gamma' | Gamma' sigma'}/.
+  {
+    injection /v0/.
+    subst /Gamma'/.
+    reduce //.
+    reflexivity.
+  }
+  {
+    injection /v3/.
+  }
+}
+{
+  intro /Gamma tau n Hbound IH Hbound' gamma/.
+  destruct /gamma/ /V gamma/.
+  reduce //.
+  destruct /Hbound'/ /{ Gamma' | Gamma' sigma'}/.
+  {
+    injection /v0/.
+    injection /v1/.
+  }
+  {
+    injection /v3/.
+    subst /v0/.
+    injection /v2/.
+    subst /sigma'/.
+    reduce //.
+    subst /Gamma'/.
+    {
+      auto.
+    }
+    {
+      apply /IH/.
+    }
+  }
+}  
 qed ();
 
 lemma "deriv_irr"
@@ -922,6 +931,42 @@ induction /deriv/.
 }
 qed ();
 
+
+(* lemma "subst_preserves_type"
+/
+  forall (Gamma : list ty) (M : term) (sigma : ty) .
+    has_type Gamma M sigma ->
+      forall (sub : Subst.sub pcfSubstT) (Delta : list ty) .
+        subst_typed sub Gamma Delta ->
+          has_type Delta (Subst.subst pcfSubstT sub M) sigma
+/;
+
+intro /Gamma M sigma Hty/.
+induction /Hty/.
+{
+  intro /Gamma idx sigma Hbound sub Delta Hsubty/.
+  unfold /subst_typed in Hsubty/.
+  auto.
+}
+{
+  intro /Gamma n sub Delta Hsubty/.
+  reduce //.
+  apply /NumTyped/.
+}
+{
+  intro /Gamma sigma tau M Hty IH sub Delta Hsubty/.
+  reduce //.
+  apply /LamTyped/.
+  apply /IH/.
+  unfold /subst_typed/.
+  intro /sigma' n Hbound/.
+  apply /renaming_preserves_type/.
+
+
+  intro /Gamma idx sigma Hbound sub Delta Hsubty/.
+
+} *)
+
 define /semantic_renaming {Gamma Delta} sub gamma delta/
 /
   forall n m sigma Hbound Hbound' .
@@ -942,995 +987,213 @@ inference.
 typecheck.
 qed ();
 
-
-
-lemma "subst_typed_under"
+(* lemma "weaken_subst"
 /
-  forall (sub : Subst.sub pcfSubstT) (Gamma Delta : list ty) (sigma : ty) .
-    subst_typed sub Gamma Delta ->
-      subst_typed (Subst.dot (Var 0) (Subst.shift_sub pcfSubstT sub)) (sigma :: Gamma) (sigma :: Delta)
+  forall sub Gamma Delta sigma .
+    subst_typed sub Gamma Delta -> *)
+
+
+lemma "semantic_renaming_eq"
+/
+  forall (Gamma Delta : list ty) (M : term) (sigma : ty)
+    (sub : Subst.sub pcfSubstT) (gamma : interp_ctx Gamma) (delta : interp_ctx Delta)
+    (deriv : has_type Gamma M sigma)
+    (deriv' : has_type Delta (Subst.subst pcfSubstT sub M) sigma) .
+      renaming sub Gamma Delta ->
+        semantic_renaming sub gamma delta ->
+          interp deriv gamma = interp deriv' delta : interp_type sigma
 /;
 
-unfold /subst_typed at all/.
-intro /sub Gamma Delta sigma Hsubty tau n Hbound/.
-destruct /n/ / | k/.
+(* intro /Gamma Delta M sigma sub gamma delta deriv deriv' Hrename Hsemrenaming/. *)
+intro /Gamma Delta M sigma sub gamma delta deriv deriv' Hrename Hsemrenaming/.
+revert /sub gamma delta deriv' Hrename Hsemrenaming/.
+revert /Delta/.
+induction /deriv/.
 {
   reduce //.
-  inversion /Hbound/.
-  subst /tau/.
-  apply /VarTyped/.
-  apply /Here/.
-}
-{
-  reduce //.
-  inversion /Hbound/.
-
-}
-
-
-lemma "subst_preserves_type"
-/
-  forall (Gamma : list ty) (M : term) (sigma : ty) .
-    has_type Gamma M sigma ->
-      forall (sub : Subst.sub pcfSubstT) (Delta : list ty) .
-        subst_typed sub Gamma Delta ->
-          has_type Delta (Subst.subst pcfSubstT sub M) sigma
-/;
-
-intro /Gamma M sigma Hty/.
-induction /Hty/.
-{
-  intro /Gamma idx sigma Hbound sub Delta Hsubty/.
-  rewrite /-> Subst.subst_var pcfSubstT/.
-  unfold /subst_typed in Hsubty/.
-  auto.
-}
-{
-  intro /Gamma n sub Delta Hsubty/.
-  reduce //.
-  apply /NumTyped/.
-}
-{
-  intro /Gamma sigma tau M Hty IH sub Delta Hsubty/.
-  reduce //.
-  apply /LamTyped/.
-
-  intro /Gamma idx sigma Hbound sub Delta Hsubty/.
-
-}
-  auto.
-
-
-  unfold /pcfSubstT/.
-  reduce //.
-  unfold /Subst.subst/.
-  reduce //.
-  
-}
-
-  forall (sub : Subst.sub pcfSubstT) (Gamma Delta : list ty) (M : term) (sigma : ty) .
-    subst_typed sub Gamma Delta ->
-      has_type Gamma M sigma ->
-        has_type Delta (Subst.subst pcfSubstT sub M) sigma
-/;
-
-intro /sub Gamma Delta M sigma Hsubty Hty/.
-revert /Hsubty sub/.
-
-lemma "subst_preserves_type"
-/
-  forall (Gamma : list ty) (sigma tau : ty) (M N : term) .
-    has_type (sigma :: Gamma) M tau ->
-      has_type Gamma N sigma ->
-        has_type Gamma (Subst.subst pcfSubstT (Subst.dot N (Subst.sh 0)) M) tau
-/;
-
-intro /Gamma sigma tau M/.
-induction /M/.
-{
-  intro /idx N HM HN/.
-  inversion /HM/.
-  destruct 
-  apply /VarTyped/.
-
-}
-
-
-
-
-
-lemma "fix_interp_unfold" : 
-
-openModule /Eventually/;
-
-typedef
-/
-  datatype
-    U 0
-  of
-    ctx : type =
-    | Empty : ctx
-    | Extend : ctx -> ty -> ctx
-/;
-
-
-defineInd /Gamma/
-/
-  catenate : ctx -> ctx of
-  | Empty . Gamma
-  | Extend Delta tau . Extend (catenate Delta) tau
-//
-  ctx -> ctx -> ctx
-/;
-
-typedef
-/
-  datatype
-    forall (tau : ty) .
-    U 0
-  of
-    bound : ctx -> type =
-    | Z : forall (Gamma : ctx) . bound (Extend Gamma tau)
-    | S : forall (sigma : ty) (Gamma : ctx) . bound Gamma -> bound (Extend Gamma sigma)
-/;
-
-typedef
-/
-  datatype
-    U 0
-  of
-    exp : ctx -> ty -> type =
-    | var : forall (Gamma : ctx) (tau : ty) . bound tau Gamma -> exp Gamma tau
-    (* | Zero : forall (Gamma : ctx) . exp Gamma Nat *)
-    | num : forall (Gamma : ctx) . nat -> exp Gamma Nat
-    | lam : forall (Gamma : ctx) (sigma tau : ty) . exp (Extend Gamma sigma) tau -> exp Gamma (Arrow sigma tau)
-    | app : forall (Gamma : ctx) (sigma tau : ty) . exp Gamma (Arrow sigma tau) -> exp Gamma sigma -> exp Gamma tau
-    | fix : forall (Gamma : ctx) (sigma : ty) . exp Gamma (Arrow sigma sigma) -> exp Gamma sigma
-    | succ : forall (Gamma : ctx) . exp Gamma Nat -> exp Gamma Nat
-    | pred : forall (Gamma : ctx) . exp Gamma Nat -> exp Gamma Nat
-    | ifz : forall (Gamma : ctx) (sigma : ty) . exp Gamma Nat -> exp Gamma sigma -> exp Gamma sigma
-/;
-
-define /Subst Gamma Delta/ 
-/
-  forall (sigma : ty) . bound sigma Gamma -> exp Delta sigma
-//
-  ctx -> ctx -> U 0
-/;
-
-unfold /Subst/.
-typecheck.
-qed ();
-
-define /Rename Gamma Delta/ 
-/
-  forall (sigma : ty) . bound sigma Gamma -> bound sigma Delta
-//
-  ctx -> ctx -> U 0
-/;
-
-unfold /Rename/.
-typecheck.
-qed ();
-
-defineInd /{Gamma Delta sigma} rho tau Hbound/
-(* define /extend_var (rho : Rename Gamma Delta) (tau : ty) (Hbound : bound tau (Extend Gamma sigma)) : bound tau (Extend Delta sigma) / *)
-/
-  extend_var : bound tau (Extend Gamma sigma) -> bound tau (Extend Delta sigma)  of
-  | Z Gamma' . Z tau Delta
-  | S sigma' Gamma' x . S tau sigma Delta (rho tau x)
-//
-  forall (Gamma Delta : ctx) (sigma : ty) . Rename Gamma Delta -> Rename (Extend Gamma sigma) (Extend Delta sigma)
-/;
-
-
-
-unfold /extend_var/.
-unfold /Rename at all/.
-reduce //.
-inference.
-reduce //.
-typecheck1.
-{ auto. }
-{ 
-  typecheck1.
-
-}
-
-  inversion /v1/.
-  { 
+  intro /Gamma idx sigma Hbound Delta sub gamma delta deriv' Hrenaming Hsemrenaming/ >> auto.
+  unfold /renaming in Hrenaming/.
+  unfold /semantic_renaming in Hsemrenaming/.
+  so /Hrenaming _ _ Hbound/ /m Heq Hbound'/.
+  (* rewrite /-> Hsemrenaming idx m _ Hbound Hbound' Heq/. *)
+  (* setEq /Hty/ /VarTyped Delta m sigma Hbound'/ /_/ /H/. *)
+  revert /deriv'/.
+  intro /deriv'/.
+  rewrite /-> Heq in deriv'/.
+  destructThin /deriv'/ /{}/ >> substAll >> auto.
+  {
+    injection /v5/.
+    substAll.
     auto.
   }
   {
-
-
+    reintro /contra/.
+    injection /contra/.
   }
-
-
+  {
+    reintro /contra/.
+    injection /contra/.
+  }
+  {
+    reintro /contra/.
+    injection /contra/.
+  }
+  {
+    reintro /contra/.
+    injection /contra/.
+  }
+  {
+    reintro /contra/.
+    injection /contra/.
+  }
+  {
+    reintro /contra/.
+    injection /contra/.
+  }
 }
-
-inference.
-
-
-qed ();
-
-
-introOf /Hbound/.
-
-
-
-
-inference.
-reduce //.
-
-
-
-
-
-
-
-Subst : Ctx → Ctx → Set
-  Subst Γ Δ = ∀ {A} → Γ ∋ A → term Δ A
-  
-  Rename : Ctx → Ctx → Set
-  Rename Γ Δ = ∀ {A} → Γ ∋ A → Δ ∋ A
-  
-  extend-var : Rename Γ Δ → Rename (Γ # A) (Δ # A)
-  extend-var ρ Z      =  Z
-  extend-var ρ (S x)  =  S (ρ x)
-
-  lift : Rename Γ (Γ # A)
-  lift Z = S Z
-  lift (S x) = S (lift x)
-  
-  rename : Rename Γ Δ → term Γ B → term Δ B
-  rename ρ (` x)         = ` (ρ x)
-  rename ρ yes           = yes
-  rename ρ no            = no
-  rename ρ triv          = triv
-  rename ρ (pair M₁ M₂)  = pair (rename ρ M₁) (rename ρ M₂)
-  rename ρ (fst M)       = fst (rename ρ M)
-  rename ρ (snd M)       = snd (rename ρ M)
-  rename ρ (lam M)       = lam (rename (extend-var ρ) M)
-  rename ρ (app M M₁)    = app (rename ρ M) (rename ρ M₁)
-  rename ρ zero          = zero
-  rename ρ (suc M)       = suc (rename ρ M)
-  rename ρ (rec M₀ M₁ M) = rec (rename ρ M₀) (rename (extend-var ρ) M₁) (rename ρ M)
-  
-  weaken : Subst Γ Δ → Subst (Γ # A) (Δ # A)
-  weaken γ Z     = ` Z
-  weaken γ (S x) = rename S (γ x)
-  
-  subst : Subst Γ Δ → term Γ A → term Δ A
-  subst γ (` x)         = γ x
-  subst γ yes           = yes
-  subst γ no            = no
-  subst γ triv          = triv
-  subst γ (pair M₁ M₂)  = pair (subst γ M₁) (subst γ M₂)
-  subst γ (fst M)       = fst (subst γ M)
-  subst γ (snd M)       = snd (subst γ M)
-  subst γ (lam M)       = lam (subst (weaken γ) M)
-  subst γ (app M M₁)    = app (subst γ M) (subst γ M₁)
-  subst γ zero          = zero
-  subst γ (suc M)       = suc (subst γ M)
-  subst γ (rec M₀ M₁ M) = rec (subst γ M₀) (subst (weaken γ) M₁) (subst γ M)
-  
-  extend : term Δ A → Subst Γ Δ → Subst (Γ # A) Δ
-  extend M γ Z     = M
-  extend M γ (S x) = γ x
-  
-  _[_] : term (Γ # B) A → term Γ B → term Γ A
-  N [ M ] = subst (extend M `_) N
-  
-  data _↦_ : term · A → term · A → Set where
-    step-fst   : {M M' : term · (prod A₁ A₂)} → (M ↦ M') → (fst M ↦ fst M')
-    step-fst-β : {M₁ : term · A₁} {M₂ : term · A₂} → (fst (pair M₁ M₂) ↦ M₁)
-    step-snd   : {M M' : term · (prod A₁ A₂)} → (M ↦ M') → (snd M ↦ snd M')
-    step-snd-β : {M₁ : term · A₁} {M₂ : term · A₂} → (snd (pair M₁ M₂) ↦ M₂)
-    step-app   : {M₁ M₁' : term · (arr A₁ A₂)} {M₂ : term · A₁} → (M₁ ↦ M₁') → (app M₁ M₂) ↦ (app M₁' M₂)
-    step-app-β : {M₂ : term (· # A₁) A₂} {M₁ : term · A₁} → (app (lam M₂) M₁) ↦ (M₂ [ M₁ ])
-    step-rec   : ∀ {M₀ : term · A} {M₁ M M'} → (M ↦ M') → (rec M₀ M₁ M ↦ rec M₀ M₁ M')
-    step-rec-β₀ : ∀ {M₀ : term · A} {M₁} → (rec M₀ M₁ zero ↦ M₀)
-    step-rec-β₁ : ∀ {M₀ : term · A} {M₁ M} → (rec M₀ M₁ (suc M) ↦ (M₁ [ rec M₀ M₁ M ]))
-  
-  data _↦*_ : term · A → term · A → Set where
-    ↦*-refl : {M : term · A} → M ↦* M
-    ↦*-step : {M M' M'' : term · A} → M ↦ M' → M' ↦* M'' → M ↦* M''
-  
-  ↦*-trans : {M M' M'' : term · A} → M ↦* M' → M' ↦* M'' → M ↦* M''
-  ↦*-trans ↦*-refl step = step
-  ↦*-trans (↦*-step step₁ step₂) step = ↦*-step step₁ (↦*-trans step₂ step)
-  
-  compatible : {p : term · A → term · B}
-    → ({M M' : term · A} → M ↦ M' → p M ↦ p M')
-    → {M M' : term · A} → M ↦* M' → p M ↦* p M'
-  compatible lift ↦*-refl       = ↦*-refl
-  compatible lift (↦*-step x s) = ↦*-step (lift x) (compatible lift s)
- 
-
-
-
-typedef
-/
-  datatype
-    U 0
-  of
-    ctx : type =
-    | Empty : ctx
-    | Extend : ctx -> ty -> ctx
-/;
-
-
-define /cons {a} h t/
-/
-  (h, next t)
-//
-  intersect i . forall (a : U i) .
-    a -> ev (stream a) -> stream a
-/;
-
-inference.
-introOf /i a h t/.
-unfold /cons/.
-unrollTypeUniv /stream with i/.
-typecheck.
-qed ();
-
-
-
-define /fst {a} s/
-/
-  s #1
-//
-  intersect i . forall (a : U i) .
-    stream a -> a
-/;
-
-inference.
-unfold /fst/.
-typecheck.
-reintro /s/.
-unrollTypeUniv /stream with i in s/.
-typecheck.
-qed ();
-
-
-
-define /snd {a} s/
-/
-  laterf (s #2)
-//
-  intersect i . forall (a : U i) .
-    stream a -> ev (stream a)
-/;
-
-inference.
-unfold /snd/.
-typecheck.
-reintro /s/.
-unrollTypeUniv /stream with i in s/.
-typecheck.
-qed ();
-
-
-
-reductions
-/
-  fst _ (cons _ x _) --> x ;
-  snd _ (cons _ _ s) --> later s ;
-
-  unfolding fst snd cons later
-/;
-
-
-
-define /count/
-/
-  ffix (fn (cf : future (nat -> stream nat)) n . 
-          let next c = cf
-          in
-            cons n (later (now (c (succ n)))))
-//
-  nat -> stream nat
-/;
-
-unfold /count/.
-typecheck.
-qed ();
-
-
-
-val red =
-makeReduction
-/
-  count n --> cons nat n (later (now (count (succ n)))) ;
-
-  unfolding count
-  unrolling ffix
-/;
-
-Database.setUnroll (parseConstant /count/) (Reduction.user red);
-
-
-
-define /Foralls {a} P/
-/
-  ffix (fn Ff s .
-          let next F = Ff
-          in
-            P (fst s)
-            & (bindevt t = `snd a s
-               in
-                 F t))
-//
-  intersect i . forall (a : U i) .
-    (a -> U i) -> stream a -> U i
-/;
-
-inference.
-introOf /i a P/.
-unfold /Foralls/.
-fold /manual (`bindevt _ _) within _ _/.
-typecheck.
-reintro /F s/.
-unfold /snd/.
-reduce //.
-unrollTypeUniv /stream with i in s/.
-typecheck.
-qed ();
-
-
-
-reductions
-/
-  Foralls a P (cons _ h te) --> P h & future (bindevt t = te in Foralls a P t) ;
-
-  unfolding Foralls
-  unrolling ffix
-/;
-
-
-
-lemma "Foralls_implies"
-/
-  forall i (a : U i) (P Q : a -> U i) (s : stream a) .
-    (forall x . P x -> Q x)
-    -> Foralls P s
-    -> Foralls Q s
-/;
-
-inference.
-intro /i a P Q s Himpl/.
-revert /s/.
-apply /ffix/.
-intro /[IH] s Hs/.
-unrollTypeUniv /stream with i in s/.
-destruct /s/ /h [t]/.
-fold /cons h t in Hs in concl/.
-reduce /Hs concl/.
-destruct /Hs/ /Hh [Ht]/.
-split >> auto.
-split.
-witness /bindevt_map _# 5 __ Ht/.
-auto.
-qed ();
-
-
-
-lemma "Foralls_combine"
-/
-  forall i (a : U i) (P Q : a -> U i) (s : stream a) .
-    Foralls P s
-    -> Foralls Q s
-    -> Foralls (fn x . P x & Q x) s
-/;
-
-inference.
-intro /i a P Q/.
-apply /ffix/.
-intro /[IH] s HP HQ/.
-unrollTypeUniv /stream with i in s/.
-destruct /s/ /h [t]/.
-fold /cons h t in HP in HQ in concl/.
-reduce /HP HQ concl/.
-destruct /HP/ /HPh [HPt]/.
-destruct /HQ/ /HQh [HQt]/.
-split >> auto.
-split.
-so /bindevt_and _# 5 HPt HQt/ /Ht/.
-witness /bindevt_map _# 5 __ Ht/.
-reduce //.
-intro /s (HPs HQs)/.
-apply /IH/ >> auto.
-qed ();
-
-
-
-lemma "count_lower_bound"
-/
-  forall n .
-    Foralls (fn m . n <= m) (count n)
-/;
-
-inference.
-intro /n/.
-assert /forall n' . 
-          n <= n'
-          -> Foralls (fn m . n <= m) (count n')/ /Hprop/ >>> [inference, idtac].
-1:{
-  apply /Hprop/.
+{
+  intro /Gamma n Delta sub gamma delta deriv' Hrename Hsemrename/.
+  destructThinCautious /deriv'/ /{}/.
+  reduce //.
+  auto.
+}
+{
+  intro /Gamma sigma tau M Hty IH Delta sub gamma delta deriv' Hrename Hsemrename/.
+  extensionality.
+  reintro /V/.
+  reduce //.
+  destructThinCautious /deriv'/ /{}/.
+  substAll >> auto.
+  subst /v0/.
+  reduce //.
+  witness /IH _ _ (V, gamma) (V, delta) v4 __ __/.
+  {
+    apply /weaken_renaming/.
+    auto.
+  }
+  {
+    unfold /semantic_renaming/.
+    intro /n m sigma' Hbound Hbound' Hmap/.
+    reduce //.
+    destruct /n/ / | n/.
+    {
+      reduce /Hmap/.
+      injection /Hmap/.
+      subst /m/.
+      reduce //.
+      destructThinCautious /Hbound/ /{}/.
+      destructThinCautious /Hbound'/ /{}/.
+      reduce //.
+      reflexivity.
+      auto.      
+    }
+    {
+      destructThinCautious /Hbound/ /{}/.
+      reduce //.
+      substAll >> auto.
+      reduce /Hmap/.
+      destruct /m/ / | m/.
+      {
+        rewrite /-> project_shift_sub_comm in Hmap/.
+        destructThinCautious /Hbound'/ /{}/.
+        reduce //.
+        substAll >> auto.
+        unfold /renaming in Hrename/.
+        so /Hrename _ _ v2/ /m Heq Hbound'/.
+        revert /Hmap/.
+        intro /Hmap/.
+        rewrite /-> Heq in Hmap/.
+        reduce /Hmap/.
+        rewrite /-> Subst.project_sh pcfSubstT in Hmap/.
+        reduce /Hmap/.
+        injection /Hmap/.
+        reintro /Hcontra/.
+        injection /Hcontra/.
+      }
+      {
+        destructThinCautious /Hbound'/ /{}/ >> auto.
+        reduce //.
+        substAll >> auto.
+        unfold /semantic_renaming in Hsemrename/.
+        apply /Hsemrename/.
+        reduce /Hmap/.
+        rewrite /-> Subst.shift_sub_eq_compose_sh pcfSubstT in Hmap/.
+        rewrite /-> Subst.project_compose in Hmap/.
+        unfold /renaming in Hrename/.
+        so /Hrename _ _ v2/ /m' Heq Hbound'/.
+        substAll.
+        revert /Hmap/.
+        intro /Hmap/.
+        rewrite /-> Heq in Hmap/.
+        reduce /Hmap/.
+        rewrite /-> Subst.project_sh in Hmap/.
+        reduce /Hmap/.
+        injection /Hmap/.
+        reintro /Hcong/.
+        injection /Hcong/.
+        substAll.
+        assumption.
+      }
+    }
+  }
+}
+{
+  intro /Gamma sigma tau M N HtyM IHM HtyN IHN Delta sub gamma delta Hty/.
+  destructThinCautious /Hty/ /{}/.
+  reduce //.
+  substAll >> auto.
+  reintro /sigma' HtyM' HtyN'/.
+  intro /Hrename Hsemrename/.
+  substAll >> auto.
+  so /renaming_preserves_type _ _ _ HtyN _ _ Hrename/ /HtyNrename/.
+  so /typing_det _ _ _ _ HtyNrename HtyN'/ /Heq/.
+  subst /sigma'/.
+  rewrite /-> IHM/ >> auto.
+  typechecker ();
+}
+{
+  intro /Gamma sigma M HtyM IH Delta sub gamma delta deriv'/.
+  destructThinCautious /deriv'/ /{}/.
+  substAll >> auto.
+  reintro /Hty/.
+  intro /Hrename Hsemrename/.
+  reduce //.
+  compat.
+  extensionality.
+  reintro /fx/.
+  reduce //.
+  rewrite /-> IH Delta sub gamma delta Hty Hrename Hsemrename/.
   reflexivity.
-  }
-apply /ffix/.
-intro /[IH] n' Hleq/.
-unroll /count/.
-reduce /concl/.
-split.
-  {
-  auto.
-  }
-split.
-split.
-apply /IH/.
-omega.
-qed ();
-
-
-
-define /filters {a} p/
-/
-  ffix (fn filtf s .
-          let next filt = filtf
-          in
-            if p (fst s) then
-              now (cons 
-                     (fst s) 
-                     (bindev t = snd s
-                      in
-                        later (filt t)))
-            else
-              (bindev t = snd s
-               in
-                 later (filt t)))
-//
-  intersect i . forall (a : U i) . (a -> bool) -> stream a -> ev (stream a)
-/;
-
-inference.
-unfold /filters/.
-typecheck.
-qed ();
-
-
-
-reductions
-/
-  filters a p (cons _ h te) -->
-    if p h then 
-      now (cons a 
-             h
-             (later
-                (bindev t = te
-                 in
-                   later (filters a p t))))
-      else
-        later
-          (bindev t = te
-           in
-             later (filters a p t)) ;
-
-  unfolding filters
-  unrolling ffix
-/;
-
-
-
-lemma "Foralls_filters"
-/
-  forall i (a : U i) (p : a -> bool) (s : stream a) .
-    bindevt s' = filters p s
-    in
-      Foralls (fn x . istrue (p x)) s'
-/;
-
-inference.
-intro /i a p/.
-apply /ffix/.
-intro /[IH] s/.
-unrollTypeUniv /stream with i in s/.
-destruct /s/ /h [t]/.
-fold /cons h t/.
-reduce //.
-boolCase /p h/ /Hp/.
-  {
-  split >> auto.
-  split.
-  split.
-  rewrite /-> bindevt_assoc/.
+}
+{
+  intro /Gamma M Hty IH Delta sub gamma delta Hty'/.
+  destructThinCautious /Hty'/ /{}/.
+  substAll >> auto.
+  reintro /Hty'/.
+  intro /Hrenaming Hsemrenaming/.
   reduce //.
-  apply /bindevt_simple/.  
+  rewrite /-> IH Delta sub gamma delta Hty' Hrenaming Hsemrenaming/.
+  reflexivity.
+}
+{
+  intro /Gamma M Hty IH Delta sub gamma delta Hty'/.
+  destructThinCautious /Hty'/ /{}/.
+  substAll >> auto.
+  reintro /Hty'/.
+  intro /Hrenaming Hsemrenaming/.
   reduce //.
-  intro /s/.
-  auto.
-  }
-
-  {
-  split.
-  rewrite /-> bindevt_assoc/.
-  apply /bindevt_simple/.
+  rewrite /-> IH Delta sub gamma delta Hty' Hrenaming Hsemrenaming/.
+  reflexivity.
+}
+{
+  intro /Gamma M N P sigma HtyM IHM HtyN IHN HtyP IHP Delta sub gamma delta Hty'/.
+  destructThinCautious /Hty'/ /{}/.
+  substAll >> auto.
+  reintro /HtyM' HtyN' HtyP'/.
+  intro /Hrenaming Hsemrenaming/.
   reduce //.
-  intro /s/.
-  split.
-  apply /IH/.
-  }
-qed ();
-
-
-
-lemma "Foralls_filters_preserve"
-/
-  forall i (a : U i) (p : a -> bool) (Q : a -> U i) (s : stream a) .
-    Foralls Q s
-    -> bindevt s' = filters p s
-       in
-         Foralls Q s'
-/;
-
-inference.
-intro /i a p Q/.
-apply /ffix/.
-intro /[IH] s Hs/.
-unrollTypeUniv /stream with i in s/.
-destruct /s/ /h [te]/.
-fold /cons h te in Hs in concl/.
-reduce /Hs concl/.
-destruct /Hs/ /Hh [Hte]/.
-boolCase /p h/ /Hp/.
-  {
-  split >> auto.
-  split.
-  split.
-  rewrite /-> bindevt_assoc/.
-  reduce //.
-  witness /bindevt_map _# 5 __ Hte/.
-  reduce //.
-  auto.
-  }
-
-  {
-  split.
-  rewrite /-> bindevt_assoc/.
-  reduce //.
-  witness /bindevt_map _# 5 __ Hte/.
-  reduce //.
-  intro /s Hs/.
-  split.
-  apply /IH/ >> auto.
-  }
-qed ();
-
-
-
-define /sieve {a} d/
-/
-  ffix (fn sief s .
-          let next sie = sief
-          in
-            cons 
-              (fst s)
-              (bindev t = snd s in
-               bindev t' = filters (d (fst s)) t
-               in
-                 later (now (sie t'))))
-//
-  intersect i . forall (a : U i) . (a -> a -> bool) -> stream a -> stream a
-/;
-
-inference.
-unfold /sieve/.
-typecheck.
-qed ();
-
-
-
-reductions
-/
-  sieve a d (cons _ h te) -->
-    cons a
-      h
-      (later
-         (bindev t = te in
-          bindev t' = filters a (d h) t 
-          in 
-            later (now (sieve a d t')))) ;
-
-  unfolding sieve
-  unrolling ffix
-/;
-
-
-
-lemma "sieve_preserve"
-/
-  forall i (a : U i) (P : a -> U i) (d : a -> a -> bool) (s : stream a) .
-    Foralls P s
-    -> Foralls P (sieve d s)
-/;
-
-inference.
-intro /i a P d/.
-apply /ffix/.
-intro /[IH] s Hs/.
-unrollTypeUniv /stream with i in s/.
-destruct /s/ /h [t]/.
-fold /cons h t in Hs in concl/.
-reduce /Hs concl/.
-destruct /Hs/ /Hh [Ht]/.
-split >> auto.
-split.
-split.
-rewrite /-> bindevt_assoc/.
-reduce //.
-witness /bindevt_map _# 5 __ Ht/.
-reduce //.
-intro /s Hs/.
-rewrite /-> bindevt_assoc/.
-reduce //.
-so /Foralls_filters_preserve _ _ (d h) _ _ Hs/ /H/.
-witness /bindevt_map _# 5 __ H/.
-reduce //.
-auto.
-qed ();
-
-
-
-(* You would not ordinarily want to do this, since it loops on anything but literals. *)
-(* reductions
-/
-  mod a b -->
-    if a <? b then
-      a
-    else
-      mod (a - b) b ;
-
-  unrolling mod
-/;
-
- *)
-
-(* val count = unroll /count/ >> reduce //;
-val dividesb = unfold /dividesb/ >> reduce //;
-
-
-
-lemma "primes"
-/
-  sieve (fn x y . notb (dividesb x y)) (count 2) : stream nat
-/;
-
-count.
-
-count.
-dividesb.
-
-count.
-dividesb.
-count.
-dividesb.
-dividesb.
-
-typecheck.
-qed ();
-
-
-
-(* Now: do all this again with filters defined incorrectly. *)
-
-
-(* Forces snd s eagerly. *)
-define /filters' {a} p/
-/
-  ffix (fn filtf s .
-          let next filt = filtf in
-          bindev t = snd s
-          in
-            if p (fst s) then
-              now (cons 
-                     (fst s) 
-                     (later (filt t)))
-            else
-              later (filt t))
-//
-  intersect i . forall (a : U i) . (a -> bool) -> stream a -> ev (stream a)
-/;
-
-inference.
-unfold /filters'/.
-typecheck.
-qed ();
-
-
-
-reductions
-/
-  filters' a p (cons _ h te) -->
-    later
-      (bindev t = te
-       in
-         if p h then 
-           now (cons a 
-                  h
-                  (later (filters' a p t)))
-         else
-           later (filters' a p t)) ;
-
-  unfolding filters'
-  unrolling ffix
-/;
-
-
-
-lemma "Foralls_filters'"
-/
-  forall i (a : U i) (p : a -> bool) (s : stream a) .
-    bindevt s' = filters' p s
-    in
-      Foralls (fn x . istrue (p x)) s'
-/;
-
-inference.
-intro /i a p/.
-apply /ffix/.
-intro /[IH] s/.
-unrollTypeUniv /stream with i in s/.
-destruct /s/ /h [te]/.
-fold /cons h te/.
-reduce //.
-split.
-rewrite /-> bindevt_assoc/.
-reduce //.
-apply /bindevt_simple/.
-reduce //.
-intro /t/.
-boolCase /p h/ /Hp/ >> auto.
-qed ();
-
-
-
-lemma "Foralls_filters'_preserve"
-/
-  forall i (a : U i) (p : a -> bool) (Q : a -> U i) (s : stream a) .
-    Foralls Q s
-    -> bindevt s' = filters' p s
-       in
-         Foralls Q s'
-/;
-
-inference.
-intro /i a p Q/.
-apply /ffix/.
-intro /[IH] s Hs/.
-unrollTypeUniv /stream with i in s/.
-destruct /s/ /h [te]/.
-fold /cons h te in Hs in concl/.
-reduce /Hs concl/.
-destruct /Hs/ /Hh [Hte]/.
-split.
-rewrite /-> bindevt_assoc/.
-reduce //.
-witness /bindevt_map _# 5 __ Hte/.
-reduce //.
-intro /t Ht/.
-boolCase /p h/ /Hp/ >> auto.
-qed ();
-
-
-
-define /sieve' {a} d/
-/
-  ffix (fn sief s .
-          let next sie = sief
-          in
-            cons 
-              (fst s)
-              (bindev t = snd s in
-               bindev t' = filters' (d (fst s)) t
-               in
-                 later (now (sie t'))))
-//
-  intersect i . forall (a : U i) . (a -> a -> bool) -> stream a -> stream a
-/;
-
-inference.
-unfold /sieve'/.
-typecheck.
-qed ();
-
-
-
-reductions
-/
-  sieve' a d (cons _ h te) -->
-    cons a
-      h
-      (later
-         (bindev t = te in
-          bindev t' = filters' a (d h) t 
-          in 
-            later (now (sieve' a d t')))) ;
-
-  unfolding sieve'
-  unrolling ffix
-/;
-
-
-
-lemma "sieve'_preserve"
-/
-  forall i (a : U i) (P : a -> U i) (d : a -> a -> bool) (s : stream a) .
-    Foralls P s
-    -> Foralls P (sieve' d s)
-/;
-
-inference.
-intro /i a P d/.
-apply /ffix/.
-intro /[IH] s Hs/.
-unrollTypeUniv /stream with i in s/.
-destruct /s/ /h [t]/.
-fold /cons h t in Hs in concl/.
-reduce /Hs concl/.
-destruct /Hs/ /Hh [Ht]/.
-split >> auto.
-split.
-split.
-rewrite /-> bindevt_assoc/.
-reduce //.
-witness /bindevt_map _# 5 __ Ht/.
-reduce //.
-intro /s Hs/.
-rewrite /-> bindevt_assoc/.
-reduce //.
-so /Foralls_filters'_preserve _ _ (d h) _ _ Hs/ /H/.
-witness /bindevt_map _# 5 __ H/.
-reduce //.
-auto.
-qed ();
-
-
-
-(* Computes too much. *)
-lemma "primes'"
-/
-  sieve' (fn x y . notb (dividesb x y)) (count 2) : stream nat
-/;
-
-count.
-
-count.
-dividesb.
-
-count. (* 4 *)
-dividesb.
-count. (* 5 *)
-dividesb.
-count. (* 6 *)
-dividesb.
-count. (* 7 *)
-dividesb.
-dividesb.
-
-typecheck.
-qed (); *)
-
-
-
-lemma "no_liveness"
-/
-  ev void
-/;
-
-apply /ffix/.
-intro /[IH]/.
-exact /later IH/.
+  typechecker ();
+  rewrite /-> IHM/ >> auto.
+  typechecker ();
+}
 qed ();
