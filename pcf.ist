@@ -1234,3 +1234,84 @@ apply /semantic_renaming_eq/.
   apply /bound_at_irr/.
 }
 qed ();
+
+lemma "subst_preserves_type"
+/
+  forall (Gamma : list ty) (M : term) (sigma : ty) .
+    has_type Gamma M sigma ->
+      forall (sub : Subst.sub pcfSubstT) (Delta : list ty) .
+        subst_typed sub Gamma Delta ->
+          has_type Delta (Subst.subst pcfSubstT sub M) sigma
+/;
+
+intro /Gamma M sigma Hty/.
+induction /Hty/.
+{
+  intro /Gamma idx sigma Hbound sub Delta Hsubty/.
+  unfold /subst_typed in Hsubty/.
+  auto.
+}
+{
+  intro /Gamma n sub Delta Hsubty/.
+  reduce //.
+  apply /NumTyped/.
+}
+{
+  intro /Gamma sigma tau M Hty IH sub Delta Hsubty/.
+  reduce //.
+  apply /LamTyped/.
+  apply /IH/.
+  unfold /subst_typed/.
+  intro /sigma' n Hbound/.
+  destruct /n/ / | n/.
+  {
+    destructThinCautious /Hbound/ /{}/.
+    reduce //.
+    subst /sigma'/.
+    apply /VarTyped/.
+    apply /Here/.
+  }
+  {
+    destructThinCautious /Hbound/ /{}/.
+    reintro /Hbound/.
+    reduce //.
+    rewrite /-> project_shift_sub_comm/.
+    unfold /subst_typed in Hsubty/.
+    apply /renaming_preserves_type/ >> auto.
+    unfold /renaming/.
+    intro /sigma'' n' Hbound'/.
+    exists /succ n'/.
+    rewrite /-> Subst.project_sh/.
+    reduce //.
+    split >> auto.
+    apply /There/.
+    assumption.
+  }
+}
+{
+  intro /Gamma sigma tau M N Hty IHM HtyM IHN HtyN Delta Hsubty/.
+  apply /AppTyped/ >> auto.
+}
+{
+  intro /Gamma sigma M Hty IHM HtyM Delta Hsubty/.
+  apply /FixTyped/ >> auto.
+}
+{
+  intro /Gamma M Hty IHM HtyM Delta Hsubty/.
+  apply /SuccTyped/ >> auto.
+}
+{
+  intro /Gamma M Hty IHM HtyM Delta Hsubty/.
+  apply /PredTyped/ >> auto.
+}
+{
+  intro /Gamma M N P sigma Hty IHM HtyM IHN HtyN IHP HtyP Delta Hsubty/.
+  apply /IfzTyped/ >> auto.
+}
+qed ();
+
+lemma "semantic_substitution"
+/
+  subst_typed sub Gamma 
+  interp deriv gamma = interp deriv' (V, gamma) : interp_type tau
+/;
