@@ -1235,6 +1235,23 @@ apply /semantic_renaming_eq/.
 }
 qed ();
 
+define /syntactic_semantic_subst_rel {Gamma Delta} sub gamma delta/
+/
+  forall n sigma (Hbound : bound_at sigma Gamma n).
+    exists (deriv : has_type Delta (Subst.project pcfSubstT sub n) sigma) .
+    interp deriv delta = project sigma Gamma n Hbound gamma : interp_type sigma
+//
+  intersect (i : level) .
+    forall (Gamma Delta : list ty) (sub : Subst.sub pcfSubstT) . interp_ctx Gamma -> interp_ctx Delta -> U i
+/;
+
+unfold /syntactic_semantic_subst_rel/.
+inference.
+introOf /i sub Gamma Delta/.
+reduce //.
+typecheck.
+qed ();
+
 lemma "subst_preserves_type"
 /
   forall (Gamma : list ty) (M : term) (sigma : ty) .
@@ -1312,6 +1329,488 @@ qed ();
 
 lemma "semantic_substitution"
 /
-  subst_typed sub Gamma 
-  interp deriv gamma = interp deriv' (V, gamma) : interp_type tau
+  forall Gamma M sigma (deriv : has_type Gamma M sigma) Delta sub gamma delta
+        (deriv' : has_type Delta (Subst.subst pcfSubstT sub M) sigma) .
+      subst_typed sub Gamma Delta ->
+      syntactic_semantic_subst_rel sub gamma delta ->
+      interp deriv gamma = interp deriv' delta : interp_type sigma
 /;
+
+inference.
+intro /Gamma M sigma deriv/.
+induction /deriv/.
+{
+  intro /Gamma idx sigma Hbound Delta sub gamma delta deriv' Hsubty Hrel/.
+  symmetry.
+  unfold /syntactic_semantic_subst_rel in Hrel/.
+  so /Hrel idx sigma Hbound/ /deriv Heq/.
+  transitivity /interp deriv delta/.
+  { apply /deriv_irr/. }
+  { auto. }
+}
+{
+  intro /Gamma n Delta sub gamma delta deriv' Hsubty Hrel/.
+  destructThinCautious /deriv'/ /{}/.
+  reduce //.
+  auto.
+}
+{
+  intro /Gamma sigma tau M Hty IH Delta sub gamma delta deriv'/.
+  destructThinCautious /deriv'/ /{}/.
+  substAll >> auto.
+  subst /v0/.
+  clear /v6/.
+  reintro /HtyM/.
+  intro /Hsubty Hrel/.
+  reduce //.
+  extensionality.
+  reintro /V/.
+  reduce //.
+  apply /IH/.
+  { apply /weaken_subst/ >> auto. }
+  unfold /syntactic_semantic_subst_rel/.
+  intro /n sigma' Hbound/.
+  destruct /n/ / | n/.
+  {
+    destructThinCautious /Hbound/ /{}/.
+    reduce //.
+    substAll >> auto.
+    exists /VarTyped _ _ _ (Here sigma Delta)/.
+    {
+      reduce //.
+      reflexivity.
+    }
+  }
+  {
+    destructThinCautious /Hbound/ /{}/.
+    reduce //.
+    substAll >> auto.
+    unfold /syntactic_semantic_subst_rel in Hrel/.
+    reintro /Hbound'/.
+    so /Hrel n sigma' Hbound'/ /deriv' Heq/.
+    so /weakening _ _ sigma' sigma deriv'/ /Hweaken'/.
+
+    assert /has_type
+             (cons sigma Delta)
+             (Subst.project pcfSubstT (Subst.shift_sub pcfSubstT sub) n)
+             sigma'/ /Hweaken/.
+    {
+      exact /Hweaken'/.
+      rewrite /-> project_shift_sub_comm/.
+      reflexivity.
+    }
+    exists /Hweaken/.
+    clear /Hweaken'/.
+
+    so /semantic_weakening _ _ sigma sigma' deriv' Hweaken delta V/ /H/.
+    {
+      rewrite /-> Heq in H/.
+      {
+        rewrite /-> project_shift_sub_comm/.
+        reflexivity.
+      }
+      {
+        rewrite /-> H/.
+        compat.
+        rewrite /-> project_shift_sub_comm/.
+        reflexivity. 
+      }
+    }
+    {
+      rewrite /-> project_shift_sub_comm/.
+      reflexivity. 
+    }
+  }
+}
+{
+  intro /Gamma sigma tau M N HtyM IHM HtyN IHN Delta sub gamma delta deriv'/.
+  destructThinCautious /deriv'/ /{}/.
+  substAll >> auto.
+  reintro /sigma' HtyM' HtyN'/.
+  intro /Hsubty Hrel/.
+  reduce //.
+  so /subst_preserves_type _ _ _ HtyN _ _ Hsubty/ /HtyN''/.
+  so /typing_det _ _ _ _ HtyN' HtyN''/ /Heq/.
+  subst /sigma'/.
+  rewrite /-> IHM/ >> auto.
+  typechecker ();
+}
+{
+  intro /Gamma sigma M HtyM IHM  Delta sub gamma delta deriv'/.
+  destructThinCautious /deriv'/ /{}/.
+  substAll >> auto.
+  reintro /Hty/.
+  intro /Hsubty Hrel/.
+  reduce //.
+  compat.
+  extensionality.
+  reintro /fx/.
+  reduce //.
+  compat.
+  rewrite /-> IHM/ >> auto.
+  typechecker ();
+}
+{
+  intro /Gamma M Hty IH Delta sub gamma delta deriv'/.
+  destructThinCautious /deriv'/ /{}/.
+  substAll >> auto.
+  reintro /Hty'/.
+  intro /Hsubty Hrel/.
+  reduce //.
+  compat.
+  rewrite /-> IH/ >> auto.
+  typechecker ();
+}
+{
+  intro /Gamma M Hty IH Delta sub gamma delta deriv'/.
+  destructThinCautious /deriv'/ /{}/.
+  substAll >> auto.
+  reintro /HtyM/.
+  intro /Hsubty Hrel/.
+  reduce //.
+  compat.
+  auto.
+}
+{
+  intro /Gamma M N P sigma HtyM IHM HtyN IHN HtyP IHP Delta sub gamma delta deriv'/.
+  destructThinCautious /deriv'/ /{}/.
+  substAll >> auto.
+  reintro /HtyM' HtyN' HtyP'/.
+  reduce //.
+  intro /Hsubty Hrel/.
+  compat >> auto.
+  typechecker ();
+}
+qed ();
+
+lemma "interp_sound_no_fix"
+/
+forall (M N : term) (k : bool) .
+  step M k N ->
+    k = false : bool ->
+      forall (sigma : ty) (derivM : has_type nil M sigma) (derivN : has_type nil N sigma) .
+        interp derivM () = interp derivN () : interp_type sigma
+/;
+
+intro /M N k Hstep/.
+induction /Hstep/.
+{
+  intro /M M' N k Hstep IH Hk sigma derivM/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /tau HtyM HtyN/.
+  intro /derivN/.
+  destructThinCautious /derivN/ /{}/.
+  substAll >> auto.
+  reintro /tau' HtyM' HtyN'/.
+  so /typing_det _ _ _ _ HtyN HtyN'/ /Heq/.
+  subst /tau'/.
+  reduce //.
+  rewrite /<- deriv_irr _ _ _ HtyN HtyN'/.
+  rewrite /-> IH/ >> auto.
+  auto.
+}
+{
+  intro /sigma M N Hk tau derivM/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /tau' HtyM HtyN/.
+  reduce //.
+  destructThinCautious /HtyM/ /{}/.
+  substAll >> auto.
+  reintro /HtyM HtyN/.
+  intro /derivN/.
+  reduce //.
+  apply /semantic_substitution/.
+  {
+    unfold /subst_typed/.
+    intro /sigma' n/.
+    destruct /n/ / | n/.
+    {
+      intro /Hbound/.
+      destructThinCautious /Hbound/ /{}/.
+      subst /sigma'/.
+      reduce //.
+      assumption.
+    }
+    {
+      intro /Hbound/.
+      destructThinCautious /Hbound/ /{}/.
+      reintro /Hbound/.
+      reduce //.
+      rewrite /-> Subst.project_sh/.
+      reduce //.
+      apply /VarTyped/.
+      assumption.
+    }
+  }
+  {
+    unfold /syntactic_semantic_subst_rel/.
+    intro /n sigma' Hbound/.
+    destruct /n/ / | n/.
+    {
+      destructThinCautious /Hbound/ /{}/.
+      reduce //.
+      subst /sigma'/ >> auto.
+      exists /HtyN/.
+      reflexivity.
+    }
+    {
+      destructThinCautious /Hbound/ /{}/.
+      reduce //.
+      rewrite /-> v3 in v2/.
+      inversion /v2/.
+    }
+  }
+}
+{
+  intro /M contra/.
+  injection /contra/.
+}
+{
+  intro /n _ sigma derivM/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /Htyn/.
+  destructThinCautious /Htyn/ /{}/.
+  reduce //.
+  substAll >> auto.
+  intro /derivN/.
+  destructThinCautious /derivN/ /{}/.
+  reduce //.
+  substAll >> auto.
+}
+{
+  intro /M N k Hstep IH Hk sigma derivM derivN/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /HtyM derivN/.
+  destructThinCautious /derivN/ /{}/.
+  substAll >> auto.
+  reintro /HtyN/.
+  reduce //.
+  compat.
+  so /IH __ _ HtyM HtyN/ /H/ >> auto.
+}
+{
+  intro /n _ sigma derivM derivN/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /n Htyn derivN/.
+  destructThinCautious /Htyn/ /{}/.
+  reduce //.
+  substAll >> auto.
+  destructThinCautious /derivN/ /{}/.
+  reduce //.
+  substAll >> auto.
+}
+{
+  intro /M N k Hstep IH Hk sigma derivM derivN/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /HtyM derivN/.
+  reduce //.
+  destructThinCautious /derivN/ /{}/.
+  reduce //.
+  reintro /HtyN Hnil HN/.
+  so /IH __ _ HtyM HtyN/ /H/ >> auto.
+  {
+    compat.
+    reduce /H/.
+    exact /H/ >> auto.
+  }
+}
+{
+  intro /M N _ sigma derivM derivN/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /H0 HtyM HtyN HtyM'/.
+  reduce //.
+  destructThinCautious /H0/ /{}/.
+  reduce //.
+  subst /v0/.
+  reduce //.
+  apply /deriv_irr/.
+}
+{
+  intro /M N n _ sigma derivM derivN/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /Htysuccn HtyM HtyN HtyN'/.
+  destructThinCautious /Htysuccn/ /{}/.
+  reduce //.
+  subst /v0/.
+  reduce //.
+  apply /deriv_irr/.
+}
+{
+  intro /M M' N P k Hstep IH Hk sigma derivM derivN/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /HtyM HtyN HtyP derivN/.
+  reduce //.
+  destructThinCautious /derivN/ /{}/.
+  substAll >> auto.
+  reduce //.
+  reintro /HtyM' HtyN' HtyP'/.
+  inference.
+  compat.
+  typechecker ();
+  {
+    extensionality.
+    reduce //.
+    compat.
+    {
+      apply /deriv_irr/.
+    }
+    {
+      extensionality.
+      reintro /y/.
+      reduce //.
+      apply /deriv_irr/.
+    }
+  }
+  {
+    exploit /IH __ _ HtyM HtyM'/ /H/ >> auto.
+  }
+}
+qed ();
+
+lemma "interp_sound_fix"
+/
+forall (M N : term) (k : bool) .
+  step M k N ->
+    k = true : bool ->
+      forall (sigma : ty) (derivM : has_type nil M sigma) (derivN : has_type nil N sigma) .
+        interp derivM () = delta_type sigma (interp derivN ()) : interp_type sigma
+/;
+
+intro /M N k Hstep/.
+induction /Hstep/.
+{
+  intro /M M' N k Hstep IH Hk sigma derivM/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /tau HtyM HtyN/.
+  intro /derivN/.
+  destructThinCautious /derivN/ /{}/.
+  substAll >> auto.
+  reintro /tau' HtyM' HtyN'/.
+  so /typing_det _ _ _ _ HtyN HtyN'/ /Heq/.
+  subst /tau'/.
+  reduce //.
+  rewrite /<- deriv_irr _ _ _ HtyN HtyN'/.
+  rewrite /-> IH/ >> auto.
+  auto.
+}
+{
+  intro /sigma M N Hk tau derivM/.
+  injection /Hk/.
+}
+{
+  intro /M _ sigma derivM derivN/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /HtyM derivN/.
+  destructThinCautious /derivN/ /{}/.
+  substAll >> auto.
+  reintro /sigma' HtyM' HtyFixM/.
+  reduce //.
+  reduce //.
+  destructThinCautious /HtyFixM/ /{}/.
+  substAll >> auto.
+  reintro /HtyM''/.
+  so /typing_det _ _ _ _ HtyM HtyM'/ /Hdet/.
+  injection /Hdet/.
+  subst /sigma'/.
+  clear /Hdet v1/.
+  reduce //.
+  unroll /ffix/.
+  reduce //.
+  compat.
+  compat.
+  rewrite /-> deriv_irr _ _ _ HtyM HtyM''/.
+  rewrite /-> deriv_irr _ _ _ HtyM' HtyM''/.
+  compat.
+  compat.
+  extensionality.
+  reintro /fx/.
+  reduce //.
+  compat.
+  rewrite /-> deriv_irr _ _ _ HtyM HtyM''/.
+  reflexivity.
+}
+{
+  intro /n contra/.
+  injection /contra/.
+}
+{
+  intro /M N k Hstep IH Hk sigma derivM derivN/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /HtyM derivN/.
+  destructThinCautious /derivN/ /{}/.
+  substAll >> auto.
+  reintro /HtyN/.
+  reduce //.
+  reduce //.
+  so /IH __ _ HtyM HtyN/ /H/ >> auto.
+  rewrite /-> H/.
+  reduce //.
+  reflexivity.
+}
+{
+  intro /n contra/.
+  injection /contra/.
+}
+{
+  intro /M N k Hstep IH Hk sigma derivM derivN/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /HtyM derivN/.
+  reduce //.
+  destructThinCautious /derivN/ /{}/.
+  reduce //.
+  reintro /HtyN Hnil HN/.
+  subst /v0/.
+  { eqtp /interp_ctx nil/ >> auto. }
+  subst /v1/.
+  rewrite /-> IH __ _ HtyM HtyN/.
+  reduce //.
+  reflexivity.
+}
+{
+  intro /M N contra/.
+  injection /contra/.
+}
+{
+  intro /M N n contra/.
+  injection /contra/.
+}
+{
+  intro /M M' N P k Hstep IH Hk sigma derivM derivN/.
+  destructThinCautious /derivM/ /{}/.
+  substAll >> auto.
+  reintro /HtyM HtyN HtyP derivN/.
+  reduce //.
+  destructThinCautious /derivN/ /{}/.
+  substAll >> auto.
+  reduce //.
+  reintro /HtyM' HtyN' HtyP'/.
+  inference.
+  reduce //.
+  rewrite /-> IH __ _ HtyM HtyM'/ >> auto.
+  reduce //.
+  compat.
+  compat.
+  compat.
+  extensionality.
+  reduce //.
+  compat.
+  { apply /deriv_irr/. }
+  { extensionality.
+    reintro /y/.
+    reduce //.
+    apply /deriv_irr/. }
+}
+qed ();
